@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0"/>
+    <title>Roundup</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"
+            integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
+            crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/json-enc.js"></script>
+    <link rel="stylesheet" href="./static/styles.css">
+    <link rel="manifest" href="./static/manifest.json"/>
+    <link rel="icon" type="image/x-icon" href="./static/favicon.ico">
+    <link rel="apple-touch-icon" href="./static/icons/ios/192.png"/>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+<body>
+<div id="download-modal" class="modal" style="display: none" aria-hidden="false" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div id="download-select" class="htmx-indicator"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div style="width: 100%">
+    <div style="display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center;">
+        <label style="margin: 5px">
+            <input type="text" style="min-width: 20rem" name="query" placeholder="Search..." class="form-control"
+                   hx-get="/search?type=movie&mode=query" hx-trigger="input changed delay:500ms"
+                   hx-target="#search-results" hx-indicator="#load-spinner-results">
+        </label>
+        <button type="button" class="btn btn-primary" style="margin: 5px" hx-get="/search?type=movie&mode=popular"
+                hx-target="#search-results" hx-indicator="#load-spinner-results">Popular Movies
+        </button>
+        <button type="button" class="btn btn-primary" style="margin: 5px" hx-get="/search?type=movie&mode=latest"
+                hx-target="#search-results" hx-indicator="#load-spinner-results">Latest Movies
+        </button>
+        <button type="button" class="btn btn-primary" style="margin: 5px" hx-get="/search?type=tv&mode=popular"
+                hx-target="#search-results" hx-indicator="#load-spinner-results">Popular TV
+        </button>
+        <button type="button" class="btn btn-primary" style="margin: 5px" hx-get="/search?type=tv&mode=latest"
+                hx-target="#search-results" hx-indicator="#load-spinner-results">Latest TV
+        </button>
+        <button type="button" class="btn btn-primary" style="margin: 5px" hx-get="/search?type=movie&mode=watchlist"
+                hx-target="#search-results" hx-indicator="#load-spinner-results">Watchlist
+        </button>
+        <button type="button" class="btn btn-primary" style="margin: 5px" hx-get="/search?type=movie&mode=downloads"
+                hx-target="#search-results" hx-indicator="#load-spinner-results">Downloads
+        </button>
+    </div>
+    <div style="display: flex; justify-content: center; align-items: center;">
+        <div id="load-spinner-results" class="htmx-indicator spinner-border"></div>
+    </div>
+    <div id="search-results" hx-get="/search?type=movie&mode=popular" hx-trigger="load"
+         hx-indicator="#load-spinner-results" style="width: 100%"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous"></script>
+<script>
+    document.body.addEventListener('htmx:beforeSend', function (evt) {
+        if (evt.detail.pathInfo.requestPath.startsWith("/modal_metadata")) {
+            const download_select = document.querySelector("#download-select");
+            download_select.innerHTML = '<div id="download-select" class="htmx-indicator spinner-border"></div>';
+        }
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+.results-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.result-item-container {
+    display: flex;
+    flex-direction: column;
+    max-width: 150px;
+    max-height: 250px;
+}
+
+.result-item {
+    display: flex;
+    flex-direction: column;
+    max-width: 150px;
+    max-height: 250px;
+}
+
+.result-item > a > img {
+    max-width: 150px;
+    max-height: 200px;
+    margin: 5px;
+    flex-basis: 25%;
+}
+
+.download-button {
+    margin-bottom: 5px;
+}
+
+.download-button-all {
+    margin-bottom: 5px;
+}

@@ -1,0 +1,423 @@
+use std::ops::{Deref, Not};
+use std::sync::Arc;
+
+use actix_web::error::ErrorInternalServerError;
+use actix_web::web::{Data, Json, Query};
+use actix_web::{get, post, web, Error, HttpResponse};
+use serde::Deserialize;
+
+use crate::api::imdb::{IMDBEpisode, ItemType, IMDB};
+use crate::api::moviedb::MovieDB;
+use crate::api::plex::Plex;
+use crate::api::torrent::{MediaQuality, TorrentItem, Torrenter};
+use crate::db::downloads::DownloadDatabase;
+use crate::db::imdb::IMDBDatabase;
+use crate::db::moviedb::MovieDBDatabase;
+use crate::db::DBConnection;
+use crate::AppConfig;
+
+#[derive(Deserialize)]
+pub struct DownloadQueryParams {
+    imdb_id: String,
+    title: String,
+    #[serde(rename = "type")]
+    _type: String,
+    ignore_already_exists: Option<bool>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct TorrentQuery {
+    pub imdb_id: String,
+    #[serde(default)]
+    pub season: Option<i32>,
+    #[serde(default)]
+    pub episode: Option<i32>,
+    pub quality: MediaQuality,
+    pub magnet_uri: String,
+}
+
+#[get("/find_download")]
+pub async fn find_download(
+    params: Query<DownloadQueryParams>,
+    plex: Data<Plex>,
+    db: Data<DBConnection>,
+    torrenter: Data<Torrenter>,
+    app_config: Data<AppConfig>,
+) -> Result<HttpResponse<String>, Error> {
+    let missing_tv_episodes = match params._type.as_str() {
+        "tv" => {
+            match find_missing_tv_shows(
+                plex.clone().into_inner(),
+                app_config,
+                &params.imdb_id,
+                &params.title,
+            )
+            .await
+            {
+                Ok(t) => t,
+                Err(e) => return Err(ErrorInternalServerError(e)),
+            }
+        }
+        _ => None,
+    };
+
+    let already_exists = missing_tv_episodes.is_none()
+        && match plex.exists_in_library(&params.title, false).await {
+            Ok(b) => b,
+            Err(e) => return Err(ErrorInternalServerError(e)),
+        };
+
+    // TODO: Add check to prevent downloading active downloads
+
+    if already_exists && !params.ignore_already_exists.is_some_and(|x| x) {
+        return Ok(HttpResponse::Ok()
+            .message_body("<b>Content already exists</b>".to_string())
+            .unwrap());
+    }
+
+    // Find Torrent on first platform that has a download
+    let torrents = match torrenter
+        .find_torrent(
+            params.title.to_owned(),
+            Some(params.imdb_id.to_owned()),
+            missing_tv_episodes,
+        )
+        .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            return Ok(HttpResponse::Ok()
+                .message_body(format!("<b>{}</b>", e))
+                .unwrap())
+        }
+    };
+
+    let output = create_download_modal_options(torrents);
+
+    Ok(HttpResponse::Ok().message_body(output).unwrap())
+}
+fn create_download_modal_options(items: Vec<TorrentItem>) -> String {
+    let _type = match items.first() {
+        Some(t) => t._type.clone(),
+        None => ItemType::Movie,
+    };
+
+    let all_download_button_qualities = [MediaQuality::_1080p, MediaQuality::_720p];
+
+    match _type {
+        ItemType::Movie => {
+            let select = items
+                .iter()
+                .map(create_download_movie_modal_button)
+                .collect::<Vec<String>>()
+                .join("");
+
+            format!(
+                "<div id=\"download_selection\" style=\"display: flex; flex-direction: column;\">\
+    {}\
+</div>",
+                select
+            )
+        }
+        ItemType::TvShow => {
+            let mut output = String::new();
+            output.push_str("<div>");
+
+            generate_season_download_buttons(&items, &all_download_button_qualities, &mut output);
+
+            let seasons =
+                items.chunk_by(|a, b| a.season.as_ref().unwrap() == b.season.as_ref().unwrap());
+
+            output.push_str("<div id=\"season_accordion\" class=\"accordion\">");
+            for season in seasons {
+                let season_number = season.iter().next().unwrap().season.unwrap();
+                let accordion_item = format!("<div class=\"accordion-item\">\
+        <h3 class=\"accordion-header\">\
+            <button class=\"accordion-button collapsed\" type=\"button\" data-bs-toggle=\"collapse\" data-bs-target=\"#collapseSeason{}\" aria-expanded=\"false\" aria-controls=\"collapseSeason{}\">\
+                Season {}\
+            </button>\
+        </h3>\
+        <div id=\"collapseSeason{}\" class=\"accordion-collapse collapse\" data-bs-parent=\"#season_accordion\">", season_number, season_number, season_number, season_number);
+                output.push_str(&accordion_item);
+                output.push_str("<div style=\"display: flex; flex-direction: column;\">");
+
+                generate_season_download_buttons(
+                    season,
+                    &all_download_button_qualities,
+                    &mut output,
+                );
+
+                for item in season {
+                    let btn_colour = button_colour_for_quality(&item.quality);
+
+                    let imdb_id = match item.imdb_id.starts_with("tt") {
+                        true => item.imdb_id.clone(),
+                        false => format!("tt{}", item.imdb_id),
+                    };
+
+                    let button = format!("\
+                <button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"season\": {}, \"episode\": {}, \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}' hx-ext='json-enc' hx-swap=\"outerHTML\" hx-disabled-elt=\"closest button\" hx-confirm=\"Start download?\">\
+                    Season: {} Episode: {} - {}\
+                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), item.episode.as_ref().unwrap(), item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), item.episode.as_ref().unwrap(), item.quality);
+
+                    output.push_str(&button);
+                }
+
+                output.push_str("</div>");
+                output.push_str(
+                    "</div>\
+        </div>\
+    </div>",
+                );
+            }
+
+            output.push_str("</div>");
+
+            output
+        }
+    }
+}
+
+fn generate_season_download_buttons(
+    items: &[TorrentItem],
+    qualities: &[MediaQuality],
+    output: &mut String,
+) {
+    for quality in qualities {
+        let all_matching_quality = all_torrents_for_quality(items, *quality);
+
+        if all_matching_quality.is_empty().not() {
+            let vals = all_matching_quality.iter().map(|v| {
+                let imdb_id = match v.imdb_id.starts_with("tt") {
+                    true => v.imdb_id.clone(),
+                    false => format!("tt{}", v.imdb_id),
+                };
+                format!("{{\"imdb_id\": \"{}\", \"season\": {}, \"episode\": {}, \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}", imdb_id, v.season.unwrap(), v.episode.unwrap(), v.quality, urlencoding::encode(&v.magnet_uri))
+            }).collect::<Vec<String>>().join(",");
+
+            let download_all_button = format!("\
+                <button class=\"download-button-all btn btn-success btn-lg\" hx-post=\"/start_download\" hx-vals='{{\"queries\":[{}]}}' hx-ext='json-enc'  hx-disabled-elt=\"this\" hx-confirm=\"Start download?\">\
+                    Download All ({})
+                </button>", vals, quality);
+            output.push_str(download_all_button.as_str());
+        }
+    }
+}
+
+fn all_torrents_for_quality(items: &[TorrentItem], quality: MediaQuality) -> Vec<&TorrentItem> {
+    items.iter().filter(|i| i.quality == quality).collect()
+}
+
+fn create_download_movie_modal_button(item: &TorrentItem) -> String {
+    let imdb_id = match item.imdb_id.starts_with("tt") {
+        true => item.imdb_id.clone(),
+        false => format!("tt{}", item.imdb_id),
+    };
+    let value = format!(
+        "hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}'",
+        imdb_id, item.quality, urlencoding::encode(&item.magnet_uri)
+    );
+
+    let btn_colour = button_colour_for_quality(&item.quality);
+
+    format!("<button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-ext='json-enc' hx-confirm=\"Start download?\" hx-swap=\"outerHTML\" hx-target=\"#download_selection\"{}>{}</button>", btn_colour, value, item.quality)
+}
+
+fn button_colour_for_quality(quality: &MediaQuality) -> &'static str {
+    match quality {
+        MediaQuality::Unknown => "danger",
+        MediaQuality::Cam => "warning",
+        MediaQuality::Telesync => "warning",
+        MediaQuality::_720p => "info",
+        MediaQuality::_1080p => "primary",
+        MediaQuality::BetterThan1080p => "primary",
+        MediaQuality::_480p => "warning",
+        MediaQuality::_2160p => "dark",
+        MediaQuality::_4320p => "secondary",
+    }
+}
+
+pub async fn find_missing_tv_shows(
+    plex: Arc<Plex>,
+    app_config: Data<AppConfig>,
+    imdb_id: &str,
+    title: &str,
+) -> anyhow::Result<Option<Vec<IMDBEpisode>>> {
+    let mut all_episodes = match app_config.tmdb_api_key.is_empty() {
+        true => match IMDB::search_tv_episodes(imdb_id, None, 0, None).await {
+            Ok(t) => t,
+            Err(e) => return Err(e),
+        },
+        false => {
+            match MovieDB::search_tv_episodes(
+                &app_config.tmdb_api_key,
+                imdb_id.parse::<i32>().unwrap(),
+                1,
+            )
+            .await
+            {
+                Ok(t) => t
+                    .iter()
+                    .map(|x| IMDBEpisode {
+                        id: "".to_string(),
+                        season: x.season,
+                        episode: x.episode,
+                    })
+                    .collect(),
+                Err(e) => return Err(e),
+            }
+        }
+    };
+
+    let existing_episodes = match plex.tvshow_exists_in_library(title).await {
+        Ok(t) => t,
+        Err(e) => return Err(e),
+    };
+    for existing_episode in existing_episodes {
+        if let Some((i, _)) = all_episodes.iter().enumerate().find(|(_, e)| {
+            e.season == existing_episode.season && e.episode == existing_episode.episode
+        }) {
+            all_episodes.swap_remove(i);
+        };
+    }
+
+    if all_episodes.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(all_episodes))
+    }
+}
+
+#[get("/start_download")]
+pub async fn start_download(
+    params: Query<TorrentQuery>,
+    torrenter: Data<Torrenter>,
+) -> Result<HttpResponse, Error> {
+    for magnet in params.magnet_uri.split(',') {
+        let torrent_item = TorrentItem::new(
+            params.imdb_id.clone(),
+            "".to_string(),
+            magnet.to_string(),
+            params.quality,
+            match params.season {
+                Some(_) => ItemType::TvShow,
+                None => ItemType::Movie,
+            },
+            params.season,
+            params.episode,
+            None,
+        );
+
+        match torrenter.start_download(torrent_item).await {
+            Ok(_) => (),
+            Err(e) => return Err(ErrorInternalServerError(e)),
+        };
+    }
+
+    Ok(HttpResponse::Ok().body("<b>Download Started!<b>"))
+}
+
+#[derive(Deserialize, Debug)]
+// #[serde(transparent)]
+struct TorrentQueries {
+    queries: Vec<TorrentQuery>,
+}
+
+#[post("/start_download")]
+pub async fn start_download_post(
+    params: Json<TorrentQueries>,
+    torrenter: Data<Torrenter>,
+    db: Data<DBConnection>,
+) -> Result<HttpResponse, Error> {
+    let mut params = params;
+    for data in params.queries.as_slice() {
+        let torrent_item = TorrentItem::new(
+            data.imdb_id.clone(),
+            "".to_string(),
+            urlencoding::decode(&data.magnet_uri).unwrap().to_string(),
+            MediaQuality::Unknown,
+            ItemType::Movie,
+            None,
+            None,
+            None,
+        );
+
+        match torrenter.start_download(torrent_item).await {
+            Ok(_) => (),
+            Err(e) => return Err(ErrorInternalServerError(e)),
+        };
+    }
+
+    for torrent in params.queries.iter_mut() {
+        let uri = torrent.magnet_uri.clone();
+        let magnet = urlencoding::decode(&uri).unwrap();
+        torrent.magnet_uri.clear();
+        torrent.magnet_uri.push_str(&magnet);
+    }
+
+    match DownloadDatabase::new(&db)
+        .insert_many(params.queries.as_slice())
+        .await
+    {
+        Ok(_) => (),
+        Err(e) => return Err(ErrorInternalServerError(e)),
+    }
+
+    Ok(HttpResponse::Ok().body("<b>Download Started!<b>"))
+}
+
+#[derive(Deserialize)]
+struct UpdateWatchlistQuery {
+    imdb_id: String,
+    state: bool,
+}
+
+#[get("/update_watchlist")]
+pub async fn update_watchlist(
+    query: Query<UpdateWatchlistQuery>,
+    db: web::Data<DBConnection>,
+    app_config: Data<AppConfig>,
+) -> Result<HttpResponse<String>, Error> {
+    let button = match app_config.tmdb_api_key.is_empty() {
+        true => {
+            let imdb_db = IMDBDatabase::new(db.deref());
+
+            match imdb_db
+                .update_watchlist_item(&query.imdb_id, query.state)
+                .await
+            {
+                Ok(_) => (),
+                Err(e) => return Err(ErrorInternalServerError(e)),
+            };
+
+            create_watchlist_button(&query.imdb_id, query.state)
+        }
+        false => {
+            let movie_db = MovieDBDatabase::new(db.deref());
+
+            match movie_db
+                .update_watchlist_item(query.imdb_id.parse::<i32>().unwrap(), query.state)
+                .await
+            {
+                Ok(_) => (),
+                Err(e) => return Err(ErrorInternalServerError(e)),
+            };
+
+            create_watchlist_button(&query.imdb_id, query.state)
+        }
+    };
+
+    Ok(HttpResponse::Ok().message_body(button).unwrap())
+}
+
+pub fn create_watchlist_button(imdb_id: &str, state: bool) -> String {
+    let mut button = format!("<div id=\"watchlist-button\"><button type=\"button\" class=\"btn btn-outline-secondary\" hx-target=\"#watchlist-button\" hx-get=\"/update_watchlist?imdb_id={}&state={}\">", imdb_id, !state);
+    if state {
+        button.push_str("Remove from watchlist");
+    } else {
+        button.push_str("Add to watchlist");
+    }
+    button.push_str("</button></div>");
+
+    button
+}

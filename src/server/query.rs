@@ -1,0 +1,601 @@
+use std::ops::{Deref, Div, Not};
+
+use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
+use actix_web::web::{Data, Query};
+use actix_web::{get, web, Error, HttpResponse};
+use anyhow::format_err;
+use chrono::{Datelike, Duration, Local};
+use log::error;
+use serde::Deserialize;
+use tokio::sync::Mutex;
+
+use crate::api::imdb::{IMDBItem, ItemType, SearchType, IMDB};
+use crate::api::moviedb::{MovieDB, MovieDBItem};
+use crate::api::youtube::Youtube;
+use crate::db::downloads::{ActiveDownloadIMDBItem, DownloadDatabase};
+use crate::db::imdb::IMDBDatabase;
+use crate::db::moviedb::MovieDBDatabase;
+use crate::db::DBConnection;
+use crate::{AppConfig, QueryCache};
+
+#[derive(Deserialize)]
+pub struct SearchQueryParams {
+    #[serde(rename = "type")]
+    _type: String,
+    mode: String,
+    query: Option<String>,
+}
+#[get("/search")]
+pub async fn search(
+    params: Query<SearchQueryParams>,
+    cache_update: web::Data<Mutex<QueryCache>>,
+    db: web::Data<DBConnection>,
+    app_config: Data<AppConfig>,
+) -> Result<HttpResponse<String>, Error> {
+    let _type = match params._type.to_ascii_lowercase().as_str() {
+        "movie" | "film" => ItemType::Movie,
+        "tv" | "show" | "series" => ItemType::TvShow,
+        _ => ItemType::Movie,
+    };
+
+    let mode = match params.mode.to_ascii_lowercase().as_str() {
+        "latest" | "recent" | "release" => match _type {
+            ItemType::Movie => SearchType::MovieLatestRelease,
+            ItemType::TvShow => SearchType::TVLatestRelease,
+        },
+        "popular" | "trending" => match _type {
+            ItemType::Movie => SearchType::MoviePopular,
+            ItemType::TvShow => SearchType::TVPopular,
+        },
+        "query" => {
+            match &params.query {
+                Some(t) => {
+                    if t.is_empty() {
+                        SearchType::MoviePopular // for when the text box is emptied, show the default page
+                    } else {
+                        SearchType::Query(t.to_owned())
+                    }
+                }
+                None => return Err(ErrorBadRequest("Missing Query Field")),
+            }
+        }
+        "watchlist" => SearchType::Watchlist,
+        "downloads" => SearchType::Downloads,
+        _ => match _type {
+            ItemType::Movie => SearchType::MoviePopular,
+            ItemType::TvShow => SearchType::TVPopular,
+        },
+    };
+
+    match app_config.tmdb_api_key.is_empty() {
+        true => {
+            if mode == SearchType::Downloads {
+                let db = DownloadDatabase::new(&db);
+                let items = match db.fetch_downloads_with_imdb_data().await {
+                    Ok(t) => t,
+                    Err(e) => return Err(ErrorInternalServerError(e)),
+                };
+
+                let html = generate_active_downloads_html(items);
+                return Ok(HttpResponse::Ok().message_body(html).unwrap());
+            }
+
+            let results = check_cache_then_search_imdb(mode, db, cache_update).await?;
+
+            let html = generate_search_html_imdb(results);
+            Ok(HttpResponse::Ok().message_body(html).unwrap())
+        }
+        false => {
+            let results =
+                check_cache_then_search_moviedb(mode, db, cache_update, app_config).await?;
+
+            let html = generate_search_html_moviedb(results);
+            Ok(HttpResponse::Ok().message_body(html).unwrap())
+        }
+    }
+}
+
+fn generate_active_downloads_html(items: Vec<ActiveDownloadIMDBItem>) -> String {
+    let mut output = String::new();
+
+    output.push_str("<div style=\"display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;\">");
+    let items = generate_active_downloads_items(items);
+    output.push_str(&items);
+    output.push_str("</div>");
+    output
+}
+
+fn generate_active_downloads_items(items: Vec<ActiveDownloadIMDBItem>) -> String {
+    let mut output = String::new();
+
+    for item in items {
+        output.push_str(
+            "<div class=\"card\" style=\"min-width: 24rem; width: 24rem; max-height: 14rem; margin: 0.5rem;\">",
+        );
+        output.push_str("<div class=\"row\">");
+        output.push_str("<div class=\"col\">");
+        let image = format!(
+            "<img src=\"{}\" alt=\"imdb_image\" style=\"max-height: 14rem;\"/>",
+            item.image_url
+        );
+        output.push_str(&image);
+        output.push_str("</div>");
+
+        output.push_str("<div class=\"col\">");
+        output.push_str("<div class=\"card-body\">");
+        let title = format!("<h5 class=\"card-title\">{}</h5>", item.title);
+        output.push_str(&title);
+
+        let subheading = format!("{} | {}", item.year, &item.rating);
+
+        let season_episode_text = match item.episode {
+            Some(t) => format!("<p>Season: <b>{}</b> | Episode: <b>{}</b></p>", item.season.unwrap(), t),
+            None => String::new(),
+        };
+
+        let heading = format!(
+            "<div class=\"card-text\">\
+    <p><small>{}</small></p>\
+    {}\
+    <p>{} | {:.2}%</p>\
+    </div>",
+            subheading,
+            season_episode_text,
+            item.state,
+            item.progress * 100.00
+        );
+        output.push_str(&heading);
+        output.push_str("</div>");
+        output.push_str("</div>");
+        output.push_str("</div>");
+        output.push_str("</div>");
+    }
+
+    output
+}
+
+// IMDB FUNCTIONS
+async fn check_cache_then_search_imdb(
+    search_type: SearchType,
+    db: web::Data<DBConnection>,
+    cache_update: web::Data<Mutex<QueryCache>>,
+) -> Result<Vec<IMDBItem>, Error> {
+    let imdb_db = IMDBDatabase::new(db.deref());
+    let mut twelve_hour_ago: chrono::DateTime<Local> = Local::now();
+    twelve_hour_ago = twelve_hour_ago
+        .checked_sub_signed(Duration::hours(12))
+        .unwrap();
+
+    let updated_at = match cache_update
+        .lock()
+        .await
+        .iter_mut()
+        .find(|(s_t, _)| s_t == &search_type)
+    {
+        Some((_, d_t)) => {
+            let last_updated = d_t.to_owned();
+            *d_t = Local::now();
+            last_updated
+        }
+        None => twelve_hour_ago.to_owned(),
+    };
+    drop(cache_update);
+
+    let mut output: Vec<IMDBItem> = match imdb_db.fetch(search_type.to_owned()).await {
+        Ok(t) => t,
+        Err(_) => return Err(ErrorInternalServerError("Failed to fetch from cache")),
+    };
+
+    if updated_at.le(&twelve_hour_ago) || output.is_empty() {
+        match &search_type {
+            SearchType::Query(_) | SearchType::Watchlist => {
+                if let Ok(a) = imdb_db.fetch(search_type.to_owned()).await {
+                    if a.is_empty().not() {
+                        return Ok(a);
+                    }
+                }
+            }
+            _ => (),
+        };
+
+        // Grab new results
+        let imdb: IMDB = IMDB::new(search_type, None);
+        let items = match imdb.search().await {
+            Ok(i) => i,
+            Err(e) => return Err(ErrorInternalServerError(e)),
+        };
+
+        // Update DB
+        match imdb_db.insert_or_update_many(&items).await {
+            Ok(_) => (),
+            Err(_) => {
+                return Err(ErrorInternalServerError(
+                    "Failed to insert or update IMDB items",
+                ))
+            }
+        };
+        output = items;
+    };
+
+    Ok(output)
+}
+
+fn generate_search_html_imdb(results: Vec<IMDBItem>) -> String {
+    let items = results
+        .iter()
+        .map(generate_item_html_imdb)
+        .collect::<Vec<String>>()
+        .join("");
+
+    format!("<div class=\"results-container\">{}</div>", items)
+}
+
+fn generate_item_html_imdb(item: &IMDBItem) -> String {
+    let _type = match item._type {
+        ItemType::Movie => "movie",
+        ItemType::TvShow => "tv",
+    };
+
+    format!("<div id=\"{}\" onclick=\"htmx.trigger('.htmx-request', 'htmx:abort')\" class=\"card\" style=\"width: 8rem; cursor: pointer;\" hx-get=\"/modal_metadata?id={}\" hx-target=\"#download-select\" hx-swap=\"outerHTML\" hx-indicator=\"#download-select\" hx-sync=\"#download-select:replace\" data-bs-toggle=\"modal\" data-bs-target=\"#download-modal\">\
+                <img src={} alt=\"media-image\" hx-trigger=\"intersect once\"/>\
+                <div class=\"card-body\">\
+                    <p class=\"card-text\">{} ({})</p>\
+                </div>\
+            </div>", &item.id, &item.id, item.image_url, item.title, item.year)
+}
+
+// THE MOVIE DB FUNCTIONS
+async fn check_cache_then_search_moviedb(
+    search_type: SearchType,
+    db: web::Data<DBConnection>,
+    cache_update: web::Data<Mutex<QueryCache>>,
+    app_config: Data<AppConfig>,
+) -> Result<Vec<MovieDBItem>, Error> {
+    let movie_db = MovieDBDatabase::new(db.deref());
+    let mut twelve_hour_ago: chrono::DateTime<Local> = Local::now();
+    twelve_hour_ago = twelve_hour_ago
+        .checked_sub_signed(Duration::hours(12))
+        .unwrap();
+
+    let updated_at = match cache_update
+        .lock()
+        .await
+        .iter_mut()
+        .find(|(s_t, _)| s_t == &search_type)
+    {
+        Some((_, d_t)) => {
+            let last_updated = d_t.to_owned();
+            *d_t = Local::now();
+            last_updated
+        }
+        None => twelve_hour_ago.to_owned(),
+    };
+    drop(cache_update);
+
+    let mut output: Vec<MovieDBItem> = match movie_db.fetch(search_type.to_owned()).await {
+        Ok(t) => t,
+        Err(e) => {
+            return Err(ErrorInternalServerError(e));
+        }
+    };
+
+    if updated_at.le(&twelve_hour_ago) || output.is_empty() {
+        match &search_type {
+            SearchType::Watchlist => (), // We already checked it, so no point rechecking
+            _ => {
+                // Grab new results
+                let moviedb: MovieDB = MovieDB::new(&app_config.tmdb_api_key);
+                let items = match moviedb.search(search_type).await {
+                    Ok(i) => i,
+                    Err(e) => return Err(ErrorInternalServerError(e)),
+                };
+
+                // Update DB
+                match movie_db.insert_or_update_many(&items).await {
+                    Ok(_) => {
+                        output = items;
+                    }
+                    Err(e) => return Err(ErrorInternalServerError(e)), //"Failed to insert or update MovieDB items"
+                };
+            }
+        };
+    };
+
+    Ok(output)
+}
+
+fn generate_search_html_moviedb(results: Vec<MovieDBItem>) -> String {
+    let items = results
+        .iter()
+        .map(generate_item_html_moviedb)
+        .collect::<Vec<String>>()
+        .join("");
+
+    format!("<div class=\"results-container\">{}</div>", items)
+}
+
+fn generate_item_html_moviedb(item: &MovieDBItem) -> String {
+    let _type = match item._type {
+        ItemType::Movie => "movie",
+        ItemType::TvShow => "tv",
+    };
+
+    let image_url = match &item.image_url {
+        Some(t) => format!("https://image.tmdb.org/t/p/w200{}", t),
+        None => {
+            "https://upload.wikimedia.org/wikipedia/commons/0/0a/No-image-available.png".to_string()
+        }
+    };
+
+    let year = item.release_date.year();
+
+    format!("<div id=\"{}\" onclick=\"htmx.trigger('.htmx-request', 'htmx:abort')\" class=\"card\" style=\"width: 8rem; cursor: pointer;\" hx-get=\"/modal_metadata?id={}\" hx-target=\"#download-select\" hx-swap=\"outerHTML\" hx-indicator=\"#download-select\" data-bs-toggle=\"modal\" data-bs-target=\"#download-modal\">\
+                <img src={} alt=\"media-image\" hx-trigger=\"intersect once\"/>\
+                <div class=\"card-body\">\
+                    <p class=\"card-text\">{} ({})</p>\
+                </div>\
+            </div>", &item.id, &item.id, image_url, item.title, year)
+}
+
+#[derive(Deserialize)]
+struct ModalMetadataQuery {
+    id: String,
+}
+
+#[get("/modal_metadata")]
+pub async fn modal_metadata(
+    params: Query<ModalMetadataQuery>,
+    db: web::Data<DBConnection>,
+    yt: web::Data<Youtube>,
+    app_config: Data<AppConfig>,
+) -> Result<HttpResponse<String>, Error> {
+    let body = match app_config.tmdb_api_key.is_empty() {
+        true => {
+            let mut cached_item = match get_cached_item_imdb(&params.id, Data::clone(&db)).await {
+                Ok(t) => t,
+                Err(e) => return Err(ErrorInternalServerError(e)),
+            };
+
+            let mut made_changes = false;
+
+            if cached_item.video_url.is_none() {
+                let query = format!("{} ({}) Trailer", cached_item.title, cached_item.year);
+                let video_url = match yt.search(&query).await {
+                    Ok(t) => t
+                        .iter()
+                        .find(|(title, _)| {
+                            let title = title.to_lowercase();
+                            let cache_title = cached_item.title.to_lowercase();
+                            title.contains(&cache_title)
+                        })
+                        .map(|(_, id)| id.to_string()),
+                    Err(e) => {
+                        error!("{}", e);
+                        None
+                    }
+                };
+                if video_url.is_some() {
+                    made_changes = true;
+                }
+
+                cached_item.video_url = video_url;
+            }
+
+            if cached_item.plot.is_none() {
+                let metadata = match IMDB::update_media_data(&params.id, None, None).await {
+                    Ok(t) => t,
+                    Err(e) => return Err(ErrorInternalServerError(e)),
+                };
+
+                if metadata.plot.is_some() {
+                    made_changes = true;
+                }
+
+                cached_item.plot = metadata.plot;
+                cached_item.rating = metadata.rating;
+                cached_item.runtime = metadata.runtime;
+            }
+
+            if made_changes {
+                let imdb_db = IMDBDatabase::new(db.deref());
+                match imdb_db.update_metadata(&cached_item).await {
+                    Ok(_) => (),
+                    Err(e) => return Err(ErrorInternalServerError(e)),
+                };
+            }
+
+            create_modal_body_imdb(&cached_item)
+        }
+        false => {
+            let cached_item = match get_cached_item_moviedb(&params.id, Data::clone(&db)).await {
+                Ok(t) => t,
+                Err(e) => return Err(ErrorInternalServerError(e)),
+            };
+
+            create_modal_body_moviedb(&cached_item)
+        }
+    };
+
+    Ok(HttpResponse::Ok().message_body(body).unwrap())
+}
+
+// IMDB Functions
+async fn get_cached_item_imdb(id: &str, db: Data<DBConnection>) -> anyhow::Result<IMDBItem> {
+    let imdb_db = IMDBDatabase::new(db.deref());
+    let items = imdb_db.fetch_item_by_id(id).await?;
+    if items.is_empty() {
+        return Err(format_err!("Failed to fetch item"));
+    }
+    let item = items.into_iter().next().unwrap();
+
+    Ok(item)
+}
+
+fn create_modal_body_imdb(item: &IMDBItem) -> String {
+    let title = &item.title;
+    let mut subheading = format!("{} | {}", item.year, &item.rating);
+
+    if let Some(t) = item.runtime {
+        let minutes = format!(" | {}m", t.div(60));
+        subheading.push_str(&minutes);
+    };
+
+    let default_plot = "".to_string();
+    let plot = item.plot.as_ref().unwrap_or(&default_plot);
+
+    let heading = format!(
+        "<div>\
+    <h2>{}</h2>\
+    <p><small>{}</small></p>\
+    <p>{}</p>\
+    </div>",
+        title, subheading, plot
+    );
+
+    let watchlist_button = super::download::create_watchlist_button(&item.id, item.watchlist);
+    let accordion = create_accordion_imdb(item);
+
+    let html = format!("<div id=\"download-select\">{}{}<div id=\"modal_accordion\" class=\"accordion\">{}</div></div>", heading, watchlist_button, accordion);
+
+    html
+}
+
+fn create_accordion_imdb(item: &IMDBItem) -> String {
+    let video_url = match &item.video_url {
+        Some(t) => t.to_string(),
+        None => "".to_string(),
+    };
+
+    let trailer_segment = format!("<div class=\"accordion-item\">\
+        <h3 class=\"accordion-header\">\
+            <button class=\"accordion-button\" type=\"button\" data-bs-toggle=\"collapse\" data-bs-target=\"#collapseTrailer\" aria-expanded=\"true\" aria-controls=\"collapseTrailer\">\
+                Trailer\
+            </button>\
+        </h3>\
+        <div id=\"collapseTrailer\" class=\"accordion-collapse collapse show\" data-bs-parent=\"#modal_accordion\">\
+            <div class=\"accordion-body\" style=\"width=100%\" >\
+                <iframe id=\"player\" style=\"width=100%; height: auto;\" type=\"text/html\" src=\"https://www.youtube.com/embed/{}\" frameborder=\"0\"></iframe>
+            </div>\
+        </div>\
+    </div>", video_url);
+
+    let _type = match item._type {
+        ItemType::Movie => "movie",
+        ItemType::TvShow => "tv",
+    };
+
+    let id = match item.id.strip_prefix("tt") {
+        Some(t) => t,
+        None => &item.id,
+    };
+
+    let title = format!("{} ({})", &item.title, &item.year);
+    let title_encoded = urlencoding::encode(&title);
+
+    let download_segment = format!("<div class=\"accordion-item\">\
+        <h3 class=\"accordion-header\">\
+            <button class=\"accordion-button collapsed\" type=\"button\" data-bs-toggle=\"collapse\"  data-bs-target=\"#collapseDownload\" aria-expanded=\"false\" aria-controls=\"collapseDownload\">\
+                Downloads\
+            </button>\
+        </h3>\
+        <div id=\"collapseDownload\" class=\"accordion-collapse collapse\" data-bs-parent=\"#modal_accordion\">\
+            <div class=\"accordion-body\">\
+                <div id=\"load-spinner-accordion\" class=\"htmx-indicator spinner-border\" hx-get=\"/find_download?imdb_id={}&title={}&type={}\" hx-swap=\"outerHTML\" hx-trigger=\"load\" hx-indicator=\"#load-spinner-accordion\"></div>
+            </div>\
+        </div>\
+    </div>", id, title_encoded, _type);
+
+    format!("{}{}", trailer_segment, download_segment)
+}
+
+// MovieDB Functions
+async fn get_cached_item_moviedb(id: &str, db: Data<DBConnection>) -> anyhow::Result<MovieDBItem> {
+    let movie_db = MovieDBDatabase::new(db.deref());
+    let id = id.parse::<i32>().unwrap();
+    let items = movie_db.fetch_item_by_id(id).await?;
+    if items.is_empty() {
+        return Err(format_err!("Failed to fetch item"));
+    }
+    let item = items.into_iter().next().unwrap();
+
+    Ok(item)
+}
+
+fn create_modal_body_moviedb(item: &MovieDBItem) -> String {
+    let year = item.release_date.year();
+    let rating = match &item.certification {
+        Some(t) => t.to_string(),
+        None => "TBD".to_string(),
+    };
+
+    let mut subheading = format!("{} | {}", year, rating);
+
+    match item.runtime {
+        Some(t) => {
+            let minutes = format!(" | {}m", t);
+            subheading.push_str(&minutes);
+        }
+        None => (),
+    };
+
+    let heading = format!(
+        "<div>\
+    <h2>{}</h2>\
+    <p><small>{}</small></p>\
+    <p>{}</p>\
+    </div>",
+        &item.title, subheading, &item.plot
+    );
+
+    let id = item.id.to_string();
+
+    let watchlist_button = super::download::create_watchlist_button(&id, item.watchlist);
+    let accordion = create_accordion_moviedb(&item);
+
+    let html = format!("<div id=\"download-select\">{}{}<div id=\"modal_accordion\" class=\"accordion\">{}</div></div>", heading, watchlist_button, accordion);
+
+    html
+}
+
+fn create_accordion_moviedb(item: &MovieDBItem) -> String {
+    let video_id = match &item.video_id {
+        Some(t) => t.to_string(),
+        None => "".to_string(),
+    };
+
+    let trailer_segment = format!("<div class=\"accordion-item\">\
+        <h3 class=\"accordion-header\">\
+            <button class=\"accordion-button\" type=\"button\" data-bs-toggle=\"collapse\" data-bs-target=\"#collapseTrailer\" aria-expanded=\"true\" aria-controls=\"collapseTrailer\">\
+                Trailer\
+            </button>\
+        </h3>\
+        <div id=\"collapseTrailer\" class=\"accordion-collapse collapse show\" data-bs-parent=\"#modal_accordion\">\
+            <div class=\"accordion-body\" style=\"width=100%\" >\
+                <iframe id=\"player\" style=\"width=100%; height: auto;\" type=\"text/html\" src=\"http://www.youtube.com/embed/{}\" frameborder=\"0\"></iframe>
+            </div>\
+        </div>\
+    </div>", video_id);
+
+    let _type = match item._type {
+        ItemType::Movie => "movie",
+        ItemType::TvShow => "tv",
+    };
+
+    let title = format!("{} ({})", &item.title, item.release_date.year());
+    let title_encoded = urlencoding::encode(&title);
+
+    let download_segment = format!("<div class=\"accordion-item\">\
+        <h3 class=\"accordion-header\">\
+            <button class=\"accordion-button collapsed\" type=\"button\" data-bs-toggle=\"collapse\"  data-bs-target=\"#collapseDownload\" aria-expanded=\"false\" aria-controls=\"collapseDownload\">\
+                Downloads\
+            </button>\
+        </h3>\
+        <div id=\"collapseDownload\" class=\"accordion-collapse collapse\" data-bs-parent=\"#modal_accordion\">\
+            <div class=\"accordion-body\">\
+                <div id=\"load-spinner-accordion\" class=\"htmx-indicator spinner-border\" hx-get=\"/find_download?imdb_id={}&title={}&type={}\" hx-swap=\"outerHTML\" hx-trigger=\"load\" hx-indicator=\"#load-spinner-accordion\"></div>
+            </div>\
+        </div>\
+    </div>", item.id, title_encoded, _type);
+
+    format!("{}{}", trailer_segment, download_segment)
+}
