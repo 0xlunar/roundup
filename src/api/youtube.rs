@@ -1,6 +1,7 @@
 use anyhow::format_err;
 use reqwest::{Client, ClientBuilder};
 use serde::Deserialize;
+use rayon::prelude::*;
 
 pub struct Youtube {
     client: Client,
@@ -35,7 +36,7 @@ impl Youtube {
         let text = resp.text().await?;
         let data: YoutubeSearchResponse = serde_json::from_str(&text)?;
 
-        let data = data.items.into_iter().map(|x| (x.snippet.title, x.id.video_id)).collect::<Vec<(String, String)>>();
+        let data = data.items.into_par_iter().map(|x| (x.snippet.title, x.id.video_id)).collect::<Vec<(String, String)>>();
 
         Ok(data)
     }

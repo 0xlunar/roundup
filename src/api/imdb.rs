@@ -3,6 +3,7 @@ use std::ops::Not;
 use anyhow::format_err;
 use chrono::Local;
 use log::error;
+use rayon::prelude::*;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Proxy;
 use scraper::{Html, Selector};
@@ -188,7 +189,7 @@ impl<'a> IMDB {
             .section
             .episodes
             .items
-            .iter()
+            .par_iter()
             .map(|e| {
                 IMDBEpisode::new(
                     e.id.clone(),
@@ -365,7 +366,7 @@ impl<'a> IMDB {
     fn parse_json(&self, data: &str) -> anyhow::Result<Vec<IMDBItem>> {
         let resp_data: IMDBSuggestionQueryResponse = serde_json::from_str(data)?;
 
-        let output = resp_data.data.iter().filter(|item| {
+        let output = resp_data.data.par_iter().filter(|item| {
             ItemType::from_str(item._type.as_ref().unwrap_or(&"".to_string()).as_str()).is_ok()
                 && item.year.is_some()
                 && item.image.is_some()
@@ -413,7 +414,7 @@ impl<'a> IMDB {
             .page_data
             .chart_titles
             .edges
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(i, edge)| {
                 let year = match &edge.node.release_year {

@@ -182,9 +182,8 @@ impl<'a> MovieDBDatabase<'a> {
 
     pub async fn insert_or_update_many(&self, items: &[MovieDBItem]) -> Result<(), sqlx::Error> {
         // TODO: FIX WITH ACTUAL PSQL STATEMENT OR SQLX FUNCTION THAT IS BETTER THAN THIS TRASH
-        let mut iter = items.iter();
 
-        for item in iter {
+        for item in items {
             self.insert_or_update(item).await?;
         }
 

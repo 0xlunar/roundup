@@ -1,20 +1,21 @@
 use std::ops::{Deref, Not};
 use std::sync::Arc;
 
+use actix_web::{Error, get, HttpResponse, post, web};
 use actix_web::error::ErrorInternalServerError;
 use actix_web::web::{Data, Json, Query};
-use actix_web::{get, post, web, Error, HttpResponse};
+use rayon::prelude::*;
 use serde::Deserialize;
 
-use crate::api::imdb::{IMDBEpisode, ItemType, IMDB};
+use crate::api::imdb::{IMDB, IMDBEpisode, ItemType};
 use crate::api::moviedb::MovieDB;
 use crate::api::plex::Plex;
-use crate::api::torrent::{MediaQuality, TorrentItem, Torrenter};
+use crate::api::torrent::{MediaQuality, Torrenter, TorrentItem};
+use crate::AppConfig;
+use crate::db::DBConnection;
 use crate::db::downloads::DownloadDatabase;
 use crate::db::imdb::IMDBDatabase;
 use crate::db::moviedb::MovieDBDatabase;
-use crate::db::DBConnection;
-use crate::AppConfig;
 
 #[derive(Deserialize)]
 pub struct DownloadQueryParams {
@@ -107,7 +108,7 @@ fn create_download_modal_options(items: Vec<TorrentItem>) -> String {
     match _type {
         ItemType::Movie => {
             let select = items
-                .iter()
+                .par_iter()
                 .map(create_download_movie_modal_button)
                 .collect::<Vec<String>>()
                 .join("");
@@ -205,7 +206,7 @@ fn generate_season_download_buttons(
 }
 
 fn all_torrents_for_quality(items: &[TorrentItem], quality: MediaQuality) -> Vec<&TorrentItem> {
-    items.iter().filter(|i| i.quality == quality).collect()
+    items.par_iter().filter(|i| i.quality == quality).collect()
 }
 
 fn create_download_movie_modal_button(item: &TorrentItem) -> String {
@@ -257,7 +258,7 @@ pub async fn find_missing_tv_shows(
             .await
             {
                 Ok(t) => t
-                    .iter()
+                    .par_iter()
                     .map(|x| IMDBEpisode {
                         id: "".to_string(),
                         season: x.season,
@@ -274,7 +275,7 @@ pub async fn find_missing_tv_shows(
         Err(e) => return Err(e),
     };
     for existing_episode in existing_episodes {
-        if let Some((i, _)) = all_episodes.iter().enumerate().find(|(_, e)| {
+        if let Some((i, _)) = all_episodes.par_iter().enumerate().find_any(|(_, e)| {
             e.season == existing_episode.season && e.episode == existing_episode.episode
         }) {
             all_episodes.swap_remove(i);
@@ -347,13 +348,13 @@ pub async fn start_download_post(
             Err(e) => return Err(ErrorInternalServerError(e)),
         };
     }
-
-    for torrent in params.queries.iter_mut() {
+    
+    params.queries.par_iter_mut().for_each(|torrent| {
         let uri = torrent.magnet_uri.clone();
         let magnet = urlencoding::decode(&uri).unwrap();
         torrent.magnet_uri.clear();
         torrent.magnet_uri.push_str(&magnet);
-    }
+    });
 
     match DownloadDatabase::new(&db)
         .insert_many(params.queries.as_slice())

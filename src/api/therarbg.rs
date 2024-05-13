@@ -4,6 +4,7 @@ use actix_web::http::header::HeaderValue;
 use anyhow::format_err;
 use async_trait::async_trait;
 use log::{debug, error, info};
+use rayon::prelude::*;
 use reqwest::{Client, ClientBuilder};
 use reqwest::header::HeaderMap;
 use scraper::{Html, Selector};
@@ -116,7 +117,7 @@ impl TheRARBG {
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>();
             if split_name
-                .iter()
+                .par_iter()
                 .any(|x| negative_keywords.contains(&x.to_lowercase().as_str()))
             {
                 continue;
@@ -124,8 +125,8 @@ impl TheRARBG {
 
             let default = String::from("unknown");
             let quality = split_name
-                .iter()
-                .find(|word| word.ends_with("0p"))
+                .par_iter()
+                .find_first(|word| word.ends_with("0p"))
                 .unwrap_or(&default);
             let quality = match quality.as_str() {
                 "480p" => MediaQuality::_480p,
@@ -138,8 +139,8 @@ impl TheRARBG {
             let (season, episode) = match &tv_episodes {
                 // Check if the torrent is an episode we are missing
                 Some(episodes) => match split_name
-                    .iter()
-                    .find(|x| x.starts_with('S') && x.contains('E'))
+                    .par_iter()
+                    .find_first(|x| x.starts_with('S') && x.contains('E'))
                 {
                     Some(t) => match t.split_once('E') {
                         Some((s, e)) => {
@@ -153,7 +154,7 @@ impl TheRARBG {
                                 Err(_) => continue,
                             };
 
-                            if episodes.iter().any(|missing_episode| {
+                            if episodes.par_iter().any(|missing_episode| {
                                 missing_episode.season == season
                                     && missing_episode.episode == episode
                             }) {
@@ -315,6 +316,7 @@ impl TorrentSearch for TheRARBG {
         }
 
         let imdb_id = imdb_id.unwrap();
+        // TODO: See if we can add Rayon into_par_iter() here.
         let tasks = outputs
             .into_iter()
             .map(|t| self.fetch_torrent_data(imdb_id.clone(), t.0, t.1, t.2, t.3, t.4, t.5));

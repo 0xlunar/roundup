@@ -176,9 +176,7 @@ impl<'a> IMDBDatabase<'a> {
 
     pub async fn insert_or_update_many(&self, items: &[IMDBItem]) -> Result<(), sqlx::Error> {
         // TODO: FIX WITH ACTUAL PSQL STATEMENT OR SQLX FUNCTION THAT IS BETTER THAN THIS TRASH
-        let iter = items.iter();
-
-        for item in iter {
+        for item in items {
             self.insert_or_update(item).await?;
         }
 

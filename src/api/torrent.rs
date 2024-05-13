@@ -8,6 +8,7 @@ use log::warn;
 use qbittorrent::queries::TorrentDownload;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
+use rayon::prelude::*;
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
 
@@ -128,7 +129,7 @@ impl Torrenter {
                         continue;
                     } else {
                         let filtered = r
-                            .into_iter()
+                            .into_par_iter()
                             .filter(|item| (item.quality as u8) >= (self.min_quality as u8))
                             .collect::<Vec<TorrentItem>>();
                         if filtered.is_empty().not() {

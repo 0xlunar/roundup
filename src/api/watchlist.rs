@@ -1,11 +1,14 @@
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
+
 use actix_web::web::Data;
 use anyhow::format_err;
 use chrono::Datelike;
-use tokio::time::Instant;
 use log::{info, warn};
+use rayon::prelude::*;
+use tokio::time::Instant;
+
 use crate::api::imdb::{IMDBEpisode, IMDBItem, ItemType};
 use crate::api::moviedb::MovieDBItem;
 use crate::api::plex::Plex;
@@ -20,7 +23,12 @@ use crate::server::download::TorrentQuery;
 
 static TWELVE_HOURS: u64 = 43_200;
 
-pub async fn monitor_watchlist(db: Arc<DBConnection>, plex: Arc<Plex>, torrenter: Arc<Torrenter>, app_config: Data<AppConfig>) {
+pub async fn monitor_watchlist(
+    db: Arc<DBConnection>,
+    plex: Arc<Plex>,
+    torrenter: Arc<Torrenter>,
+    app_config: Data<AppConfig>,
+) {
     info!("Starting Watchlist Monitor");
     let imdb_db = IMDBDatabase::new(db.deref());
     let movie_db = MovieDBDatabase::new(db.deref());
@@ -40,9 +48,26 @@ pub async fn monitor_watchlist(db: Arc<DBConnection>, plex: Arc<Plex>, torrenter
 
                 for item in watchlist {
                     info!("Checking: {} - {}", item.title, item.id);
-                    let result= match item._type {
-                        ItemType::Movie => check_movie_downloads_imdb(&item, torrenter.clone(), Arc::clone(&db), Data::clone(&app_config)).await,
-                        ItemType::TvShow => check_tv_downloads_imdb(&item, plex.clone(), torrenter.clone(), Data::clone(&app_config), Arc::clone(&db)).await,
+                    let result = match item._type {
+                        ItemType::Movie => {
+                            check_movie_downloads_imdb(
+                                &item,
+                                torrenter.clone(),
+                                Arc::clone(&db),
+                                Data::clone(&app_config),
+                            )
+                            .await
+                        }
+                        ItemType::TvShow => {
+                            check_tv_downloads_imdb(
+                                &item,
+                                plex.clone(),
+                                torrenter.clone(),
+                                Data::clone(&app_config),
+                                Arc::clone(&db),
+                            )
+                            .await
+                        }
                     };
 
                     match result {
@@ -53,7 +78,7 @@ pub async fn monitor_watchlist(db: Arc<DBConnection>, plex: Arc<Plex>, torrenter
                         }
                     }
                 }
-            },
+            }
             false => {
                 let watchlist = movie_db.fetch_watchlist().await.unwrap();
                 if watchlist.is_empty() {
@@ -65,9 +90,20 @@ pub async fn monitor_watchlist(db: Arc<DBConnection>, plex: Arc<Plex>, torrenter
 
                 for item in watchlist {
                     info!("Checking: {} - {}", item.title, item.id);
-                    let result= match item._type {
-                        ItemType::Movie => check_movie_downloads_moviedb(&item, torrenter.clone(), Arc::clone(&db)).await,
-                        ItemType::TvShow => check_tv_downloads_moviedb(&item, plex.clone(), torrenter.clone(), Data::clone(&app_config)).await,
+                    let result = match item._type {
+                        ItemType::Movie => {
+                            check_movie_downloads_moviedb(&item, torrenter.clone(), Arc::clone(&db))
+                                .await
+                        }
+                        ItemType::TvShow => {
+                            check_tv_downloads_moviedb(
+                                &item,
+                                plex.clone(),
+                                torrenter.clone(),
+                                Data::clone(&app_config),
+                            )
+                            .await
+                        }
                     };
 
                     match result {
@@ -78,27 +114,42 @@ pub async fn monitor_watchlist(db: Arc<DBConnection>, plex: Arc<Plex>, torrenter
                         }
                     }
                 }
-            },
+            }
         }
-        
-        info!("Sleeping for {} hours...", recheck_delay.as_secs() / 60 / 60);
+
+        info!(
+            "Sleeping for {} hours...",
+            recheck_delay.as_secs() / 60 / 60
+        );
         let _ = tokio::time::sleep_until(Instant::now() + recheck_delay).await;
     }
 }
 
-async fn check_movie_downloads_imdb(item: &IMDBItem, torrenter: Arc<Torrenter>, db: Arc<DBConnection>, _: Data<AppConfig>) -> anyhow::Result<()> {
+async fn check_movie_downloads_imdb(
+    item: &IMDBItem,
+    torrenter: Arc<Torrenter>,
+    db: Arc<DBConnection>,
+    _: Data<AppConfig>,
+) -> anyhow::Result<()> {
     find_downloads_and_start_imdb(item, None, torrenter, db.clone()).await?;
-    
+
     // Remove from watchlist as no further movies will release under this ID
     let imdb_db = IMDBDatabase::new(db.deref());
     imdb_db.update_watchlist_item(&item.id, false).await?;
 
     Ok(())
 }
-async fn check_tv_downloads_imdb(item: &IMDBItem, plex: Arc<Plex>, torrenter: Arc<Torrenter>, app_config: Data<AppConfig>, db: Arc<DBConnection>) -> anyhow::Result<()> {
+async fn check_tv_downloads_imdb(
+    item: &IMDBItem,
+    plex: Arc<Plex>,
+    torrenter: Arc<Torrenter>,
+    app_config: Data<AppConfig>,
+    db: Arc<DBConnection>,
+) -> anyhow::Result<()> {
     let title = format!("{} ({})", &item.title, item.year);
 
-    let missing_episodes = download::find_missing_tv_shows(plex, app_config, &item.id, &title).await?;
+    let missing_episodes =
+        download::find_missing_tv_shows(plex, app_config, &item.id, &title).await?;
     if missing_episodes.is_none() {
         return Err(format_err!("No missing episodes"));
     }
@@ -109,7 +160,11 @@ async fn check_tv_downloads_imdb(item: &IMDBItem, plex: Arc<Plex>, torrenter: Ar
     Ok(())
 }
 
-async fn check_movie_downloads_moviedb(item: &MovieDBItem, torrenter: Arc<Torrenter>, db: Arc<DBConnection>) -> anyhow::Result<()> {
+async fn check_movie_downloads_moviedb(
+    item: &MovieDBItem,
+    torrenter: Arc<Torrenter>,
+    db: Arc<DBConnection>,
+) -> anyhow::Result<()> {
     find_downloads_and_start_moviedb(item, None, torrenter).await?;
 
     // Remove from watchlist as no further movies will release under this ID
@@ -119,7 +174,12 @@ async fn check_movie_downloads_moviedb(item: &MovieDBItem, torrenter: Arc<Torren
     Ok(())
 }
 
-async fn check_tv_downloads_moviedb(item: &MovieDBItem, plex: Arc<Plex>, torrenter: Arc<Torrenter>, app_config: Data<AppConfig>) -> anyhow::Result<()> {
+async fn check_tv_downloads_moviedb(
+    item: &MovieDBItem,
+    plex: Arc<Plex>,
+    torrenter: Arc<Torrenter>,
+    app_config: Data<AppConfig>,
+) -> anyhow::Result<()> {
     let title = format!("{} ({})", &item.title, item.release_date.year());
 
     let id = item.id.to_string();
@@ -135,14 +195,24 @@ async fn check_tv_downloads_moviedb(item: &MovieDBItem, plex: Arc<Plex>, torrent
     Ok(())
 }
 
-
-async fn find_downloads_and_start_imdb(item: &IMDBItem, episodes: Option<Vec<IMDBEpisode>>, torrenter: Arc<Torrenter>, db: Arc<DBConnection>) -> anyhow::Result<()> {
-    let torrents = match torrenter.find_torrent(item.title.to_owned(), Some(item.id.to_owned()), episodes).await {
+async fn find_downloads_and_start_imdb(
+    item: &IMDBItem,
+    episodes: Option<Vec<IMDBEpisode>>,
+    torrenter: Arc<Torrenter>,
+    db: Arc<DBConnection>,
+) -> anyhow::Result<()> {
+    let torrents = match torrenter
+        .find_torrent(item.title.to_owned(), Some(item.id.to_owned()), episodes)
+        .await
+    {
         Ok(t) => t,
         Err(e) => return Err(e),
     };
 
-    let torrents = torrents.into_iter().filter(|x| x.quality == MediaQuality::_1080p).collect::<Vec<TorrentItem>>();
+    let torrents = torrents
+        .into_par_iter()
+        .filter(|x| x.quality == MediaQuality::_1080p)
+        .collect::<Vec<TorrentItem>>();
     if torrents.is_empty() {
         return Err(format_err!("No torrents available"));
     }
@@ -156,7 +226,7 @@ async fn find_downloads_and_start_imdb(item: &IMDBItem, episodes: Option<Vec<IMD
             quality: torrent.quality,
             magnet_uri: torrent.magnet_uri.clone(),
         };
-        
+
         match download_db.insert(&query).await {
             Ok(_) => (),
             Err(e) => return Err(format_err!("Failed to insert torrent, {}", e)),
@@ -169,13 +239,27 @@ async fn find_downloads_and_start_imdb(item: &IMDBItem, episodes: Option<Vec<IMD
 
     Ok(())
 }
-async fn find_downloads_and_start_moviedb(item: &MovieDBItem, episodes: Option<Vec<IMDBEpisode>>, torrenter: Arc<Torrenter>) -> anyhow::Result<()> {
-    let torrents = match torrenter.find_torrent(item.title.to_owned(), Some(item.imdb_id.to_owned()), episodes).await {
+async fn find_downloads_and_start_moviedb(
+    item: &MovieDBItem,
+    episodes: Option<Vec<IMDBEpisode>>,
+    torrenter: Arc<Torrenter>,
+) -> anyhow::Result<()> {
+    let torrents = match torrenter
+        .find_torrent(
+            item.title.to_owned(),
+            Some(item.imdb_id.to_owned()),
+            episodes,
+        )
+        .await
+    {
         Ok(t) => t,
         Err(e) => return Err(e),
     };
 
-    let torrents = torrents.into_iter().filter(|x| x.quality == MediaQuality::_1080p).collect::<Vec<TorrentItem>>();
+    let torrents = torrents
+        .into_par_iter()
+        .filter(|x| x.quality == MediaQuality::_1080p)
+        .collect::<Vec<TorrentItem>>();
     if torrents.is_empty() {
         return Err(format_err!("No torrents available"));
     }

@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
 use crate::api::torrent::{MediaQuality, TorrentItem, TorrentSearch};
+use rayon::prelude::*;
 
 pub struct EZTV {
     client: Client,
@@ -102,7 +103,7 @@ impl TorrentSearch for EZTV {
 
         let mut torrents: Vec<TorrentItem> = data
             .torrents
-            .iter()
+            .par_iter()
             .filter(|t| {
                 let season = t.season.parse::<i32>().unwrap();
                 let episode = t.episode.parse::<i32>().unwrap();

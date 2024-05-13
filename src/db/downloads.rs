@@ -1,5 +1,6 @@
 use chrono::Local;
 use qbittorrent::data::Hash;
+use rayon::prelude::*;
 use serde::Serialize;
 use sqlx::{Postgres, QueryBuilder, Row};
 
@@ -122,7 +123,7 @@ impl<'a> DownloadDatabase<'a> {
                     query_builder.push_bind(season_number);
 
                     query_builder.push(" AND episode in (");
-                    let episodes = season.iter().map(|e| e.episode);
+                    let episodes = season.par_iter().map(|e| e.episode).collect::<Vec<i32>>();
                     for episode in episodes {
                         query_builder.push_bind(episode);
                         query_builder.push(", ");
@@ -136,8 +137,8 @@ impl<'a> DownloadDatabase<'a> {
                 }
 
                 let filtered = sorted
-                    .into_iter()
-                    .filter(|e| downloading_episodes.contains(&(e.season, e.episode)))
+                    .into_par_iter()
+                    .filter(|e| downloading_episodes.par_iter().any(|a| a == &(e.season, e.episode)))
                     .collect::<Vec<IMDBEpisode>>();
                 if filtered.is_empty() {
                     Ok((false, None))
@@ -220,7 +221,7 @@ impl<'a> DownloadDatabase<'a> {
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(String::from(
             "DELETE FROM active_downloads WHERE magnet_hash NOT IN (",
         ));
-        
+
         let len = active_hashes.len();
         active_hashes.iter().enumerate().for_each(|(i, x)| {
             query_builder.push_bind(x.as_str());

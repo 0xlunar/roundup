@@ -5,11 +5,7 @@ use regex::Regex;
 use reqwest::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-
-pub struct SeasonQuery {
-    pub season: u16,
-    pub total_episodes: u16,
-}
+use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct Episode {
@@ -115,8 +111,8 @@ impl Plex {
         let movie_hub = match data
             .media_container
             .hub
-            .iter()
-            .find(|h| h.title.eq("Movies"))
+            .par_iter()
+            .find_any(|h| h.title.eq("Movies"))
         {
             Some(d) => d,
             None => return Err(format_err!("Missing Movies hub")),
@@ -129,7 +125,7 @@ impl Plex {
 
         for metadata in meta {
             if !exact_match {
-                if metadata.title.starts_with(&title) && metadata.year.eq(&year) {
+                if metadata.title.starts_with(title) && metadata.year.eq(&year) {
                     match metadata.media.first() {
                         Some(t) => match t.part.first() {
                             Some(p) => {
@@ -213,8 +209,8 @@ impl Plex {
         let shows_hub = match data
             .media_container
             .hub
-            .into_iter()
-            .find(|h| h.title.as_str() == "Shows")
+            .into_par_iter()
+            .find_any(|h| h.title.as_str() == "Shows")
         {
             Some(t) => match t.metadata {
                 Some(t) => t,
@@ -224,7 +220,7 @@ impl Plex {
         };
 
         for metadata in shows_hub {
-            if metadata.title.starts_with(&title) && metadata.year.eq(&year) {
+            if metadata.title.starts_with(title) && metadata.year.eq(&year) {
                 let available = self
                     .fetch_available_tvshow_children(&metadata.rating_key)
                     .await?;
@@ -261,7 +257,7 @@ impl Plex {
         let data = data
             .media_container
             .metadata
-            .into_iter()
+            .into_par_iter()
             .filter(|i| {
                 i.media
                     .first()
@@ -274,15 +270,6 @@ impl Plex {
             .collect::<Vec<Episode>>();
 
         Ok(data)
-    }
-}
-
-impl SeasonQuery {
-    pub fn new(season: u16, total_episodes: u16) -> Self {
-        Self {
-            season,
-            total_episodes,
-        }
     }
 }
 

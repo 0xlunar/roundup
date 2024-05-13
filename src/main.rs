@@ -11,8 +11,9 @@ use actix_web::web::Data;
 use chrono::{DateTime, Local};
 use log::{error, info, warn};
 use qbittorrent::Api;
-use qbittorrent::data::{Hash, State};
+use qbittorrent::data::{Hash, State, Torrent};
 use qbittorrent::traits::TorrentData;
+use rayon::prelude::*;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
@@ -251,8 +252,11 @@ async fn monitor_torrents(
         let _ = db.remove_all().await;
         return;
     }
-    
-    let hashes = torrents.iter().map(|x| x.hash()).collect::<Vec<&Hash>>();
+
+    let hashes = torrents
+        .par_iter()
+        .map(|x| x.hash())
+        .collect::<Vec<&Hash>>();
     let _ = db.remove_all_finished().await;
     let _ = db.remove_manually_removed(&hashes).await;
 
@@ -292,11 +296,11 @@ async fn monitor_torrents(
 
     // TODO: Find better way of doing this
     let filtered_clone = torrents_filtered.clone();
-    let torrents = torrents.iter().filter(|t| {
+    let torrents = torrents.par_iter().filter(|t| {
         let hash = t.hash().as_str();
         let contains = auto_torrents.contains(hash);
         contains && filtered_clone.contains(hash).not()
-    } && matches!(t.state(), State::Downloading | State::StalledDL | State::ForceDL));
+    } && matches!(t.state(), State::Downloading | State::StalledDL | State::ForceDL)).collect::<Vec<&Torrent>>();
 
     let mut thirty_minutes_ago: DateTime<Local> = Local::now();
     thirty_minutes_ago = thirty_minutes_ago
@@ -304,6 +308,7 @@ async fn monitor_torrents(
         .unwrap();
 
     let mut torrents_to_reannounce = vec![];
+
     for torrent in torrents {
         stalled_torrents
             .entry(torrent.hash().clone().inner())

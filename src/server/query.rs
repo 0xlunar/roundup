@@ -1,22 +1,23 @@
 use std::ops::{Deref, Div, Not};
 
+use actix_web::{Error, get, HttpResponse, web};
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
 use actix_web::web::{Data, Query};
-use actix_web::{get, web, Error, HttpResponse};
 use anyhow::format_err;
 use chrono::{Datelike, Duration, Local};
 use log::error;
+use rayon::prelude::*;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
-use crate::api::imdb::{IMDBItem, ItemType, SearchType, IMDB};
+use crate::{AppConfig, QueryCache};
+use crate::api::imdb::{IMDB, IMDBItem, ItemType, SearchType};
 use crate::api::moviedb::{MovieDB, MovieDBItem};
 use crate::api::youtube::Youtube;
+use crate::db::DBConnection;
 use crate::db::downloads::{ActiveDownloadIMDBItem, DownloadDatabase};
 use crate::db::imdb::IMDBDatabase;
 use crate::db::moviedb::MovieDBDatabase;
-use crate::db::DBConnection;
-use crate::{AppConfig, QueryCache};
 
 #[derive(Deserialize)]
 pub struct SearchQueryParams {
@@ -98,7 +99,9 @@ pub async fn search(
 fn generate_active_downloads_html(items: Vec<ActiveDownloadIMDBItem>) -> String {
     let mut output = String::new();
 
-    output.push_str("<div style=\"display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;\">");
+    output.push_str(
+        "<div style=\"display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;\">",
+    );
     let items = generate_active_downloads_items(items);
     output.push_str(&items);
     output.push_str("</div>");
@@ -129,7 +132,11 @@ fn generate_active_downloads_items(items: Vec<ActiveDownloadIMDBItem>) -> String
         let subheading = format!("{} | {}", item.year, &item.rating);
 
         let season_episode_text = match item.episode {
-            Some(t) => format!("<p>Season: <b>{}</b> | Episode: <b>{}</b></p>", item.season.unwrap(), t),
+            Some(t) => format!(
+                "<p>Season: <b>{}</b> | Episode: <b>{}</b></p>",
+                item.season.unwrap(),
+                t
+            ),
             None => String::new(),
         };
 
@@ -169,8 +176,8 @@ async fn check_cache_then_search_imdb(
     let updated_at = match cache_update
         .lock()
         .await
-        .iter_mut()
-        .find(|(s_t, _)| s_t == &search_type)
+        .par_iter_mut()
+        .find_any(|(s_t, _)| s_t == &search_type)
     {
         Some((_, d_t)) => {
             let last_updated = d_t.to_owned();
@@ -222,7 +229,7 @@ async fn check_cache_then_search_imdb(
 
 fn generate_search_html_imdb(results: Vec<IMDBItem>) -> String {
     let items = results
-        .iter()
+        .par_iter()
         .map(generate_item_html_imdb)
         .collect::<Vec<String>>()
         .join("");
@@ -260,8 +267,8 @@ async fn check_cache_then_search_moviedb(
     let updated_at = match cache_update
         .lock()
         .await
-        .iter_mut()
-        .find(|(s_t, _)| s_t == &search_type)
+        .par_iter_mut()
+        .find_any(|(s_t, _)| s_t == &search_type)
     {
         Some((_, d_t)) => {
             let last_updated = d_t.to_owned();
@@ -306,7 +313,7 @@ async fn check_cache_then_search_moviedb(
 
 fn generate_search_html_moviedb(results: Vec<MovieDBItem>) -> String {
     let items = results
-        .iter()
+        .par_iter()
         .map(generate_item_html_moviedb)
         .collect::<Vec<String>>()
         .join("");
@@ -362,8 +369,8 @@ pub async fn modal_metadata(
                 let query = format!("{} ({}) Trailer", cached_item.title, cached_item.year);
                 let video_url = match yt.search(&query).await {
                     Ok(t) => t
-                        .iter()
-                        .find(|(title, _)| {
+                        .par_iter()
+                        .find_any(|(title, _)| {
                             let title = title.to_lowercase();
                             let cache_title = cached_item.title.to_lowercase();
                             title.contains(&cache_title)
