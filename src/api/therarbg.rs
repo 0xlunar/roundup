@@ -332,6 +332,7 @@ impl TorrentSearch for TheRARBG {
         }
 
         if tv_episodes.is_some() {
+            torrents.retain(|x| x.season.is_some() && x.episode.is_some());
             torrents.sort_by(|a, b| {
                 let a_s = a.season.as_ref().unwrap();
                 let b_s = b.season.as_ref().unwrap();
@@ -383,7 +384,6 @@ impl TorrentSearch for TheRARBG {
                 a.quality == b.quality && a.seeds.as_ref().unwrap() < b.seeds.as_ref().unwrap()
             });
         }
-
         Ok(torrents)
     }
 }

@@ -69,10 +69,33 @@ pub async fn find_download(
         };
 
     // TODO: Add check to prevent downloading active downloads
+    let download_db = DownloadDatabase::new(db.deref());
+    
+    let imdb_id = match params.imdb_id.starts_with("tt") {
+        true => params.imdb_id.to_owned(),
+        false => format!("tt{}", params.imdb_id),
+    };
+
+    let (is_downloading, missing_tv_episodes) = match download_db
+        .is_downloading(&imdb_id, missing_tv_episodes.as_ref())
+        .await
+    {
+        Ok(t) => t,
+        Err(e) => return Err(ErrorInternalServerError(e)),
+    };
 
     if already_exists && !params.ignore_already_exists.is_some_and(|x| x) {
         return Ok(HttpResponse::Ok()
             .message_body("<b>Content already exists</b>".to_string())
+            .unwrap());
+    }
+
+    if is_downloading
+        && (missing_tv_episodes.is_none()
+            || missing_tv_episodes.as_ref().is_some_and(|x| x.is_empty()))
+    {
+        return Ok(HttpResponse::Ok()
+            .message_body("<b>Content is already downloading</b>".to_string())
             .unwrap());
     }
 
@@ -348,7 +371,7 @@ pub async fn start_download_post(
             Err(e) => return Err(ErrorInternalServerError(e)),
         };
     }
-    
+
     params.queries.par_iter_mut().for_each(|torrent| {
         let uri = torrent.magnet_uri.clone();
         let magnet = urlencoding::decode(&uri).unwrap();

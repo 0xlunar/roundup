@@ -1,3 +1,5 @@
+use std::ops::Not;
+
 use chrono::Local;
 use qbittorrent::data::Hash;
 use rayon::prelude::*;
@@ -85,7 +87,7 @@ impl<'a> DownloadDatabase<'a> {
     pub async fn is_downloading(
         &self,
         imdb_id: &str,
-        episodes: Option<&[IMDBEpisode]>,
+        episodes: Option<&Vec<IMDBEpisode>>,
     ) -> anyhow::Result<(bool, Option<Vec<IMDBEpisode>>)> {
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(String::new());
 
@@ -123,27 +125,38 @@ impl<'a> DownloadDatabase<'a> {
                     query_builder.push_bind(season_number);
 
                     query_builder.push(" AND episode in (");
-                    let episodes = season.par_iter().map(|e| e.episode).collect::<Vec<i32>>();
-                    for episode in episodes {
+                    let mut episodes = season.iter().map(|e| e.episode).peekable();
+                    while let Some(episode) = episodes.next() {
                         query_builder.push_bind(episode);
-                        query_builder.push(", ");
+                        if episodes.peek().is_some() {
+                            query_builder.push(", ");
+                        }
                     }
-                    query_builder.push(")");
+                    
+                    query_builder.push(" )");
                     let mut resp: Vec<(i32, i32)> = query_builder
                         .build_query_as()
                         .fetch_all(&self.db.db)
                         .await?;
                     downloading_episodes.append(&mut resp);
                 }
+                let sorted_len = sorted.len();
 
                 let filtered = sorted
                     .into_par_iter()
-                    .filter(|e| downloading_episodes.par_iter().any(|a| a == &(e.season, e.episode)))
+                    .filter(|e| {
+                        downloading_episodes
+                            .par_iter()
+                            .any(|a| a == &(e.season, e.episode))
+                            .not()
+                    })
                     .collect::<Vec<IMDBEpisode>>();
                 if filtered.is_empty() {
-                    Ok((false, None))
+                    Ok((true, None)) // We are downloading everything
+                } else if sorted_len == filtered.len() {
+                    Ok((false, Some(filtered))) // we aren't downloading any
                 } else {
-                    Ok((true, Some(filtered)))
+                    Ok((true, Some(filtered))) // We are partially downloading
                 }
             }
         }
