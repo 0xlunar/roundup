@@ -131,12 +131,18 @@ fn generate_active_downloads_items(items: Vec<ActiveDownloadIMDBItem>) -> String
 
         let subheading = format!("{} | {}", item.year, &item.rating);
 
-        let season_episode_text = match item.episode {
-            Some(t) => format!(
-                "<p>Season: <b>{}</b> | Episode: <b>{}</b></p>",
-                item.season.unwrap(),
-                t
-            ),
+        let season_episode_text = match item.season {
+            Some(t) => {
+                let episode = match item.episode {
+                    Some(t) => format!(" | Episode: <b>{}</b>", t),
+                    None => String::new()
+                };
+                format!(
+                    "<p>Season: <b>{}</b>{}</p>",
+                    t,
+                    episode
+                )
+            },
             None => String::new(),
         };
 

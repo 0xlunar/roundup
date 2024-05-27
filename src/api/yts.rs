@@ -43,8 +43,11 @@ impl TorrentSearch for YTS {
         &self,
         search_term: String,
         imdb_id: Option<String>,
-        _: Option<Vec<IMDBEpisode>>,
+        missing_episodes: Option<Vec<IMDBEpisode>>,
     ) -> anyhow::Result<Vec<TorrentItem>> {
+        if missing_episodes.is_some() {
+            return Err(format_err!("Not a movie"))
+        }
         let q_t = match imdb_id {
             Some(t) => {
                 if t.starts_with("tt") {

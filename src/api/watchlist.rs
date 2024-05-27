@@ -201,8 +201,20 @@ async fn find_downloads_and_start_imdb(
     torrenter: Arc<Torrenter>,
     db: Arc<DBConnection>,
 ) -> anyhow::Result<()> {
+    let download_db = DownloadDatabase::new(db.deref());
+    let (is_downloading, remaining_episodes) =
+        download_db.is_downloading(&item.id, episodes).await?;
+
+    if is_downloading && remaining_episodes.is_none() {
+        return Err(format_err!("Already downloading."));
+    }
+
     let torrents = match torrenter
-        .find_torrent(item.title.to_owned(), Some(item.id.to_owned()), episodes)
+        .find_torrent(
+            item.title.to_owned(),
+            Some(item.id.to_owned()),
+            remaining_episodes,
+        )
         .await
     {
         Ok(t) => t,
@@ -211,13 +223,19 @@ async fn find_downloads_and_start_imdb(
 
     let torrents = torrents
         .into_par_iter()
-        .filter(|x| x.quality == MediaQuality::_1080p)
+        .filter(|x| {
+            x.quality == MediaQuality::_1080p
+                && match x.episode {
+                    Some(e) => e >= 0,
+                    None => true,
+                }
+        })
         .collect::<Vec<TorrentItem>>();
     if torrents.is_empty() {
         return Err(format_err!("No torrents available"));
     }
-    let download_db = DownloadDatabase::new(db.deref());
     info!("Downloading Item: {}", item.id);
+    let download_db = DownloadDatabase::new(db.deref());
     for torrent in torrents {
         let query = TorrentQuery {
             imdb_id: torrent.imdb_id.clone(),

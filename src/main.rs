@@ -33,7 +33,7 @@ pub type QueryCache = Vec<(SearchType, DateTime<Local>)>;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    let mut config = AppConfig::load();
+    let config = AppConfig::load();
 
     match config.tmdb_api_key.is_empty() {
         true => info!("Using IMDB"),

@@ -138,35 +138,67 @@ impl TheRARBG {
 
             let (season, episode) = match &tv_episodes {
                 // Check if the torrent is an episode we are missing
-                Some(episodes) => match split_name
-                    .par_iter()
-                    .find_first(|x| x.starts_with('S') && x.contains('E'))
-                {
-                    Some(t) => match t.split_once('E') {
-                        Some((s, e)) => {
-                            let season = match s.strip_prefix('S').unwrap().parse::<i32>() {
-                                Ok(t) => t,
-                                Err(_) => continue,
-                            };
+                Some(episodes) => {
+                    let name_lowercase = name.to_lowercase();
+                    let (season, episode) = match split_name
+                        .par_iter()
+                        .find_first(|x| 
+                            (x.starts_with('S') && x.contains('E')) || // Individual Episodes
+                            ((x.as_str().eq("Season") || x.as_str().eq("season")) && !name_lowercase.contains("episode"))) // Season packs
+                    {
+                        Some(t) => {
+                            if t.as_str().eq("Season") || t.as_str().eq("season") { // Season Packs
+                                let mut peekable = split_name.iter().peekable();
+                                let mut season_number = None;
+                                while let Some(t) = peekable.next() {
+                                    if t.as_str().eq("Season") || t.as_str().eq("season") {
+                                        match peekable.peek() {
+                                            Some(p) => match p.parse::<i32>() {
+                                                Ok(s) => season_number = Some(s),
+                                                Err(_) => continue,
+                                            },
+                                            None => break,
+                                        }
+                                    }
+                                }
+                                
+                                if season_number.is_none() {
+                                    continue;
+                                }
 
-                            let episode = match e.parse::<i32>() {
-                                Ok(t) => t,
-                                Err(_) => continue,
-                            };
+                                (season_number, Some(-1))
+                            } else { // Individual Episodes
+                                match t.split_once('E') {
+                                    Some((s, e)) => {
+                                        let season =
+                                            match s.strip_prefix('S').unwrap().parse::<i32>() {
+                                                Ok(t) => t,
+                                                Err(_) => continue,
+                                            };
 
-                            if episodes.par_iter().any(|missing_episode| {
-                                missing_episode.season == season
-                                    && missing_episode.episode == episode
-                            }) {
-                                (Some(season), Some(episode))
-                            } else {
-                                continue;
+                                        let episode = match e.parse::<i32>() {
+                                            Ok(t) => t,
+                                            Err(_) => continue,
+                                        };
+
+                                        if episodes.par_iter().any(|missing_episode| {
+                                            missing_episode.season == season
+                                                && missing_episode.episode == episode
+                                        }) {
+                                            (Some(season), Some(episode))
+                                        } else {
+                                            continue;
+                                        }
+                                    }
+                                    None => continue,
+                                }
                             }
                         }
                         None => continue,
-                    },
-                    None => continue,
-                },
+                    };
+
+                    (season, episode)
+                }
                 None => (None, None),
             };
 
@@ -330,59 +362,67 @@ impl TorrentSearch for TheRARBG {
                 Err(e) => error!("Error fetching torrent data: {}", e),
             }
         }
+        
+        match tv_episodes {
+            Some(tv_episodes) => {
+                let episodes = tv_episodes.iter().map(|ep| (ep.season, ep.episode)).collect::<Vec<(i32,i32)>>();
+                torrents.retain(|x| x.season.is_some() && x.episode.is_some() 
+                    && (episodes.contains(&(x.season.unwrap(), x.episode.unwrap())) 
+                        || episodes.contains(&(x.season.unwrap(), -1))
+                    )
+                );
+                torrents.sort_by(|a, b| {
+                    let a_s = a.season.as_ref().unwrap();
+                    let b_s = b.season.as_ref().unwrap();
 
-        if tv_episodes.is_some() {
-            torrents.retain(|x| x.season.is_some() && x.episode.is_some());
-            torrents.sort_by(|a, b| {
-                let a_s = a.season.as_ref().unwrap();
-                let b_s = b.season.as_ref().unwrap();
-
-                if a_s == b_s {
-                    let a_e = a.episode.as_ref().unwrap();
-                    let b_e = b.episode.as_ref().unwrap();
-                    if a_e == b_e {
-                        let qual_ordering = b.quality.cmp(&a.quality);
-                        if qual_ordering.is_eq() {
-                            b.seeds.as_ref().unwrap().cmp(a.seeds.as_ref().unwrap())
+                    if a_s == b_s {
+                        let a_e = a.episode.as_ref().unwrap();
+                        let b_e = b.episode.as_ref().unwrap();
+                        if a_e == b_e {
+                            let qual_ordering = b.quality.cmp(&a.quality);
+                            if qual_ordering.is_eq() {
+                                b.seeds.as_ref().unwrap().cmp(a.seeds.as_ref().unwrap())
+                            } else {
+                                qual_ordering
+                            }
                         } else {
-                            qual_ordering
+                            a_e.cmp(b_e)
                         }
                     } else {
-                        a_e.cmp(b_e)
+                        a_s.cmp(b_s)
                     }
-                } else {
-                    a_s.cmp(b_s)
-                }
-            });
+                });
 
-            torrents.dedup_by(|a, b| {
-                let a_s = a.season.as_ref().unwrap();
-                let b_s = b.season.as_ref().unwrap();
+                torrents.dedup_by(|a, b| {
+                    let a_s = a.season.as_ref().unwrap();
+                    let b_s = b.season.as_ref().unwrap();
 
-                if a_s == b_s {
-                    b.episode.as_ref().unwrap() == a.episode.as_ref().unwrap()
-                        && a.quality == b.quality
-                        && a.seeds.as_ref().unwrap() < b.seeds.as_ref().unwrap()
-                } else {
-                    false
-                }
-            });
-        } else {
-            torrents.sort_by(|a, b| {
-                let qual_ordering = b.quality.cmp(&a.quality);
-                if qual_ordering.is_eq() {
-                    let a_seeds = a.seeds.as_ref().unwrap();
-                    let b_seeds = b.seeds.as_ref().unwrap();
+                    if a_s == b_s {
+                        b.episode.as_ref().unwrap() == a.episode.as_ref().unwrap()
+                            && a.quality == b.quality
+                            && a.seeds.as_ref().unwrap() < b.seeds.as_ref().unwrap()
+                    } else {
+                        false
+                    }
+                });
+            },
+            None => {
+                torrents.sort_by(|a, b| {
+                    let qual_ordering = b.quality.cmp(&a.quality);
+                    if qual_ordering.is_eq() {
+                        let a_seeds = a.seeds.as_ref().unwrap();
+                        let b_seeds = b.seeds.as_ref().unwrap();
 
-                    b_seeds.cmp(a_seeds)
-                } else {
-                    qual_ordering
-                }
-            });
+                        b_seeds.cmp(a_seeds)
+                    } else {
+                        qual_ordering
+                    }
+                });
 
-            torrents.dedup_by(|a, b| {
-                a.quality == b.quality && a.seeds.as_ref().unwrap() < b.seeds.as_ref().unwrap()
-            });
+                torrents.dedup_by(|a, b| {
+                    a.quality == b.quality && a.seeds.as_ref().unwrap() < b.seeds.as_ref().unwrap()
+                });
+            },
         }
         Ok(torrents)
     }

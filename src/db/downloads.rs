@@ -12,6 +12,16 @@ use crate::server::download::TorrentQuery;
 
 use super::DBConnection;
 
+// Voodoo shit from https://github.com/rust-lang/rust/issues/89976#issuecomment-1073115246
+// Fixes Tokio error with thinking a generic lifetime is for a specific lifetime when it needs to be generic.
+// thanks https://github.com/petrosagg
+fn type_hint<F>(f: F) -> F
+where
+    F: for<'a> FnMut(&'a IMDBEpisode) -> i32,
+{
+    f
+}
+
 #[derive(sqlx::FromRow, Serialize)]
 pub struct ActiveDownloadItem {
     id: i32,
@@ -87,7 +97,7 @@ impl<'a> DownloadDatabase<'a> {
     pub async fn is_downloading(
         &self,
         imdb_id: &str,
-        episodes: Option<&Vec<IMDBEpisode>>,
+        episodes: Option<Vec<IMDBEpisode>>,
     ) -> anyhow::Result<(bool, Option<Vec<IMDBEpisode>>)> {
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(String::new());
 
@@ -101,9 +111,8 @@ impl<'a> DownloadDatabase<'a> {
                     None => Ok((false, None)),
                 }
             }
-            Some(episodes) => {
-                let mut sorted = episodes.to_vec();
-                sorted.sort_by(|a, b| {
+            Some(mut episodes) => {
+                episodes.sort_by(|a, b| {
                     let season_cmp = b.season.cmp(&a.season);
                     if season_cmp.is_eq() {
                         b.episode.cmp(&a.episode)
@@ -112,9 +121,9 @@ impl<'a> DownloadDatabase<'a> {
                     }
                 });
 
-                let seasons = sorted.chunk_by(|a, b| a.season == b.season);
+                let seasons = episodes.chunk_by(|a, b| a.season == b.season);
 
-                let mut downloading_episodes = Vec::new();
+                let mut downloading_episodes: Vec<(i32, i32)> = Vec::new();
                 for season in seasons {
                     query_builder.reset();
                     let season_number = season.first().unwrap().season;
@@ -125,14 +134,14 @@ impl<'a> DownloadDatabase<'a> {
                     query_builder.push_bind(season_number);
 
                     query_builder.push(" AND episode in (");
-                    let mut episodes = season.iter().map(|e| e.episode).peekable();
+                    let mut episodes = season.iter().map(type_hint(|e| e.episode)).peekable();
                     while let Some(episode) = episodes.next() {
                         query_builder.push_bind(episode);
                         if episodes.peek().is_some() {
                             query_builder.push(", ");
                         }
                     }
-                    
+
                     query_builder.push(" )");
                     let mut resp: Vec<(i32, i32)> = query_builder
                         .build_query_as()
@@ -140,9 +149,9 @@ impl<'a> DownloadDatabase<'a> {
                         .await?;
                     downloading_episodes.append(&mut resp);
                 }
-                let sorted_len = sorted.len();
+                let sorted_len = episodes.len();
 
-                let filtered = sorted
+                let filtered = episodes
                     .into_par_iter()
                     .filter(|e| {
                         downloading_episodes

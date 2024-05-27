@@ -61,7 +61,7 @@ pub async fn find_download(
         }
         _ => None,
     };
-
+    
     let already_exists = missing_tv_episodes.is_none()
         && match plex.exists_in_library(&params.title, false).await {
             Ok(b) => b,
@@ -77,7 +77,7 @@ pub async fn find_download(
     };
 
     let (is_downloading, missing_tv_episodes) = match download_db
-        .is_downloading(&imdb_id, missing_tv_episodes.as_ref())
+        .is_downloading(&imdb_id, missing_tv_episodes)
         .await
     {
         Ok(t) => t,
@@ -178,13 +178,23 @@ fn create_download_modal_options(items: Vec<TorrentItem>) -> String {
                         true => item.imdb_id.clone(),
                         false => format!("tt{}", item.imdb_id),
                     };
-
-                    let button = format!("\
+                    
+                    let episode = item.episode.as_ref().unwrap();
+                    if *episode == -1 {
+                        let button = format!("\
+                <button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"season\": {}, \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}' hx-ext='json-enc' hx-swap=\"outerHTML\" hx-disabled-elt=\"closest button\" hx-confirm=\"Start download?\">\
+                    Entire Season {} - {}\
+                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), item.quality);
+                        output.push_str(&button);
+                    } else {
+                        let button = format!("\
                 <button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"season\": {}, \"episode\": {}, \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}' hx-ext='json-enc' hx-swap=\"outerHTML\" hx-disabled-elt=\"closest button\" hx-confirm=\"Start download?\">\
                     Season: {} Episode: {} - {}\
-                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), item.episode.as_ref().unwrap(), item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), item.episode.as_ref().unwrap(), item.quality);
+                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), episode, item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), episode, item.quality);
 
-                    output.push_str(&button);
+                        output.push_str(&button);
+                        
+                    }
                 }
 
                 output.push_str("</div>");
@@ -211,7 +221,7 @@ fn generate_season_download_buttons(
         let all_matching_quality = all_torrents_for_quality(items, *quality);
 
         if all_matching_quality.is_empty().not() {
-            let vals = all_matching_quality.iter().map(|v| {
+            let vals = all_matching_quality.par_iter().filter(|x| x.episode.as_ref().unwrap().ge(&0) ).map(|v| {
                 let imdb_id = match v.imdb_id.starts_with("tt") {
                     true => v.imdb_id.clone(),
                     false => format!("tt{}", v.imdb_id),
