@@ -169,6 +169,7 @@ async fn main() -> anyhow::Result<()> {
             .service(server::download::find_download)
             .service(server::download::start_download_post)
     })
+    .bind(("0.0.0.0", 80))?
     .bind_rustls_0_22(("0.0.0.0", 443), tls_config)?
     .run()
     .await?;

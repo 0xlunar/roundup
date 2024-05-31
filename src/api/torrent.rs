@@ -140,7 +140,7 @@ impl Torrenter {
                     }
                 }
                 Err(e) => {
-                    warn!("Error: {}", e);
+                    warn!("{}", e);
                     continue;
                 }
             };

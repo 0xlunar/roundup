@@ -110,7 +110,7 @@ impl TheRARBG {
                 None => continue,
             };
 
-            let negative_keywords = ["hdcam", "hdts", "ts", "cam", "camrip", "telesync"]; // I don't care for cams/telesyncs, update these if you like them.
+            let negative_keywords = ["hdcam", "hdts", "ts", "cam", "camrip", "telesync", "tsx"]; // I don't care for cams/telesyncs, update these if you like them.
 
             let split_name = name
                 .split(' ')
@@ -119,6 +119,7 @@ impl TheRARBG {
             if split_name
                 .par_iter()
                 .any(|x| negative_keywords.contains(&x.to_lowercase().as_str()))
+                || name.to_lowercase().contains("hd ts")
             {
                 continue;
             }
