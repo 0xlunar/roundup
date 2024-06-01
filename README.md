@@ -35,5 +35,7 @@ Easy to use Movie/TV Show torrent aggregator
 
 - Fix episodes on TheRARBG not being shown
     - Ensure additional pages are being checked
-- Add check to prevent same media being downloaded before plex tracks it.
-    - Ensure applied to Watchlist and requested media
+- Fix TheRARBG not parsing certain torrents
+- Fix IMDB not parsing numbers and other data.
+- Add Season pack support for EZTV
+- Fix EZTV not providing episodes.

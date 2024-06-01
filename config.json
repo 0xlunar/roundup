@@ -3,8 +3,17 @@
   "qbittorrent_username": "admin",
   "qbittorrent_password": "",
   "db_url": "",
-  "valid_file_types": ["mkv", "mp4", "avi", "srt", "mov", "webm", "m4v"],
+  "valid_file_types": [
+    "mkv",
+    "mp4",
+    "avi",
+    "srt",
+    "mov",
+    "webm",
+    "m4v"
+  ],
   "minimum_quality": "720p",
   "youtube_api_key": "",
-  "tmdb_api_key": ""
+  "tmdb_api_key": "",
+  "watchlist_recheck_interval_hours": 6
 }

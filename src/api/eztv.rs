@@ -70,7 +70,7 @@ impl TorrentSearch for EZTV {
         tv_episodes: Option<Vec<IMDBEpisode>>,
     ) -> anyhow::Result<Vec<TorrentItem>> {
         if tv_episodes.is_none() {
-            return Err(format_err!("No TV Episodes to search"));
+            return Err(format_err!("Not a TV show"));
         }
 
         let imdb_id_clone = imdb_id.clone().unwrap();

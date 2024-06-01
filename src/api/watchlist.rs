@@ -20,8 +20,7 @@ use crate::db::imdb::IMDBDatabase;
 use crate::db::moviedb::MovieDBDatabase;
 use crate::server::download;
 use crate::server::download::TorrentQuery;
-
-static TWELVE_HOURS: u64 = 43_200;
+static ONE_HOUR: u64 = 3_600;
 
 pub async fn monitor_watchlist(
     db: Arc<DBConnection>,
@@ -32,7 +31,11 @@ pub async fn monitor_watchlist(
     info!("Starting Watchlist Monitor");
     let imdb_db = IMDBDatabase::new(db.deref());
     let movie_db = MovieDBDatabase::new(db.deref());
-    let recheck_delay = Duration::from_secs(TWELVE_HOURS);
+    let mut recheck_interval = 6;
+    if app_config.watchlist_recheck_interval_hours.gt(&6) { // Minimum of 6 hours delay, to prevent pointless spam.
+        recheck_interval = app_config.watchlist_recheck_interval_hours as u64;
+    }
+    let recheck_delay = Duration::from_secs(ONE_HOUR * recheck_interval);
 
     loop {
         info!("Fetching Watchlist");

@@ -33,6 +33,9 @@ pub type QueryCache = Vec<(SearchType, DateTime<Local>)>;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    if cfg!(debug_assertions) {
+        console_subscriber::init();
+    }
     let config = AppConfig::load();
 
     match config.tmdb_api_key.is_empty() {
@@ -190,6 +193,7 @@ struct AppConfigImport {
     minimum_quality: String,
     youtube_api_key: String,
     tmdb_api_key: String,
+    watchlist_recheck_interval_hours: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -202,6 +206,7 @@ struct AppConfig {
     minimum_quality: MediaQuality,
     youtube_api_key: String,
     tmdb_api_key: String,
+    watchlist_recheck_interval_hours: i64,
 }
 
 impl AppConfig {
@@ -227,6 +232,7 @@ impl AppConfig {
             },
             youtube_api_key: imported.youtube_api_key,
             tmdb_api_key: imported.tmdb_api_key,
+            watchlist_recheck_interval_hours: imported.watchlist_recheck_interval_hours,
         };
 
         config
