@@ -7,23 +7,13 @@ use serde::Deserialize;
 use crate::api::imdb::{IMDBEpisode, ItemType};
 use crate::api::torrent::{MediaQuality, TorrentItem, TorrentSearch};
 
-static TRACKERS: [&str; 8] = [
-    "udp://open.demonii.com:1337/announce",
-    "udp://tracker.openbittorrent.com:80",
-    "udp://tracker.coppersurfer.tk:6969",
-    "udp://glotorrents.pw:6969/announce",
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://torrent.gresille.org:80/announce",
-    "udp://p4p.arenabg.com:1337",
-    "udp://tracker.leechers-paradise.org:6969",
-];
-
 pub struct YTS {
     client: Client,
+    trackers: Vec<String>,
 }
 
 impl YTS {
-    pub fn new() -> Box<Self> {
+    pub fn new(trackers: &[String]) -> Box<Self> {
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", HeaderValue::from_static("roundup/1.0"));
         headers.insert("Accept", HeaderValue::from_static("application/json"));
@@ -33,7 +23,7 @@ impl YTS {
             .build()
             .unwrap();
 
-        Box::new(Self { client })
+        Box::new(Self { client, trackers: trackers.to_vec() })
     }
 }
 
@@ -46,7 +36,7 @@ impl TorrentSearch for YTS {
         missing_episodes: Option<Vec<IMDBEpisode>>,
     ) -> anyhow::Result<Vec<TorrentItem>> {
         if missing_episodes.is_some() {
-            return Err(format_err!("Not a movie"))
+            return Err(format_err!("Not a movie"));
         }
         let q_t = match imdb_id {
             Some(t) => {
@@ -89,7 +79,7 @@ impl TorrentSearch for YTS {
         for movie in data.data.movies {
             for torrent in movie.torrents {
                 let encoded_title = urlencoding::encode(&movie.title);
-                let trackers = TRACKERS.join("&tr=");
+                let trackers = self.trackers.join("&tr=");
                 let magnet = format!(
                     "magnet:?xt=urn:btih:{}&dn={}&tr={}",
                     torrent.hash, encoded_title, trackers

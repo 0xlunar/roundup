@@ -135,14 +135,10 @@ fn generate_active_downloads_items(items: Vec<ActiveDownloadIMDBItem>) -> String
             Some(t) => {
                 let episode = match item.episode {
                     Some(t) => format!(" | Episode: <b>{}</b>", t),
-                    None => String::new()
+                    None => String::new(),
                 };
-                format!(
-                    "<p>Season: <b>{}</b>{}</p>",
-                    t,
-                    episode
-                )
-            },
+                format!("<p>Season: <b>{}</b>{}</p>", t, episode)
+            }
             None => String::new(),
         };
 
@@ -376,10 +372,10 @@ pub async fn modal_metadata(
                 let video_url = match yt.search(&query).await {
                     Ok(t) => t
                         .par_iter()
-                        .find_any(|(title, _)| {
+                        .find_first(|(title, _)| {
                             let title = title.to_lowercase();
                             let cache_title = cached_item.title.to_lowercase();
-                            title.contains(&cache_title)
+                            title.contains(&cache_title) && title.contains("trailer")
                         })
                         .map(|(_, id)| id.to_string()),
                     Err(e) => {

@@ -75,6 +75,7 @@ async fn main() -> anyhow::Result<()> {
         &config.qbittorrent_url,
         config.minimum_quality,
         torrent_tx.clone(),
+        config.trackers.clone()
     )
     .await;
 
@@ -194,6 +195,8 @@ struct AppConfigImport {
     youtube_api_key: String,
     tmdb_api_key: String,
     watchlist_recheck_interval_hours: i64,
+    #[serde(default)]
+    trackers: Vec<String>
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +210,7 @@ struct AppConfig {
     youtube_api_key: String,
     tmdb_api_key: String,
     watchlist_recheck_interval_hours: i64,
+    trackers: Vec<String>
 }
 
 impl AppConfig {
@@ -233,6 +237,7 @@ impl AppConfig {
             youtube_api_key: imported.youtube_api_key,
             tmdb_api_key: imported.tmdb_api_key,
             watchlist_recheck_interval_hours: imported.watchlist_recheck_interval_hours,
+            trackers: imported.trackers,
         };
 
         config

@@ -38,4 +38,16 @@ Easy to use Movie/TV Show torrent aggregator
 - Fix TheRARBG not parsing certain torrents
 - Fix IMDB not parsing numbers and other data.
 - Add Season pack support for EZTV
-- Fix EZTV not providing episodes.
+- Fix no video id for youtube videos
+- Update TheRARBG to use their YAPS API
+
+## Contribute
+
+If you are looking to contribute to the project, please fork and make pull requests to be reviewed.
+Please be descriptive on the problem you're looking to solve and the plan to solve it in your PR.
+
+## Support the Project
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W0YYBB7)
+
+**ETH**: 0xB37A8d6EA028cad32fBF71167B12C2827EcE9766

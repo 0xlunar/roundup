@@ -94,7 +94,7 @@ impl TorrentSearch for EZTV {
 
         data.torrents = data
             .torrents
-            .into_iter()
+            .into_par_iter()
             .filter(|a| a.seeds.gt(&0))
             .collect::<Vec<EZTVTorrent>>();
         data.torrents.sort_by(|a, b| b.seeds.cmp(&a.seeds));

@@ -87,6 +87,7 @@ pub struct Torrenter {
     client: qbittorrent::Api,
     mpsc: UnboundedSender<String>,
     min_quality: MediaQuality,
+    trackers: Vec<String>
 }
 impl Torrenter {
     pub async fn new(
@@ -95,6 +96,7 @@ impl Torrenter {
         address: &str,
         min_quality: MediaQuality,
         mpsc_sender: UnboundedSender<String>,
+        trackers: Vec<String>
     ) -> Self {
         let client = qbittorrent::Api::new(username, password, address)
             .await
@@ -104,6 +106,7 @@ impl Torrenter {
             client,
             min_quality,
             mpsc: mpsc_sender,
+            trackers
         }
     }
 
@@ -114,9 +117,9 @@ impl Torrenter {
         tv_episodes: Option<Vec<IMDBEpisode>>,
     ) -> anyhow::Result<Vec<TorrentItem>> {
         let ordering: Vec<Box<dyn TorrentSearch>> = vec![
-            crate::api::yts::YTS::new(),           // Movie
-            crate::api::eztv::EZTV::new(),         // TV
-            crate::api::therarbg::TheRARBG::new(), // Any
+            crate::api::yts::YTS::new(&self.trackers),  // Movie
+            crate::api::eztv::EZTV::new(),              // TV
+            crate::api::therarbg::TheRARBG::new(),      // Any
         ];
 
         for site in ordering {
