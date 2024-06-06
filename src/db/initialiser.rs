@@ -15,10 +15,10 @@ impl<'a> DatabaseInitialiser<'a> {
         info!("Initialising Database");
         let mut tx = self.db.db.begin().await?;
 
-        let item_type_sql = include_str!("sql\\item_type.sql");
-        let imdb_sql = include_str!("sql\\imdb.sql");
-        let moviedb_sql = include_str!("sql\\moviedb.sql");
-        let active_downloads_sql = include_str!("sql\\downloads.sql");
+        let item_type_sql = include_str!("sql/item_type.sql");
+        let imdb_sql = include_str!("sql/imdb.sql");
+        let moviedb_sql = include_str!("sql/moviedb.sql");
+        let active_downloads_sql = include_str!("sql/downloads.sql");
 
         // Doesn't return anything useful on success or error so can ignore, if it fails the app just won't work
         tx.execute(item_type_sql).await?;
