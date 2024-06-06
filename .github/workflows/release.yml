@@ -19,4 +19,4 @@ jobs:
         with:
           RUSTTARGET: ${{ matrix.target }}
           TOOLCHAIN_VERSION: stable
-          EXTRA_FILES: "README.md LICENSE config.json static/*"
+          EXTRA_FILES: "README.md LICENSE config.json static/* static/icons/* static/icons/ios/* static/icons/android/*"
