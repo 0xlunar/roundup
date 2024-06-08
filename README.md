@@ -10,7 +10,6 @@ Easy to use Movie/TV Show torrent aggregator
 ![htmx](https://img.shields.io/badge/htmx-%25.svg?style=flat&logo=htmx&logoColor=white&color=3366CC)
 ![Bootstrap](https://img.shields.io/badge/bootstrap-%25.svg?style=flat&logo=bootstrap&logoColor=white&color=7952B3)
 ![IMDb](https://img.shields.io/badge/imdb-%25.svg?style=flat&logo=imdb&logoColor=black&color=F5C518)
-![Docker](https://img.shields.io/badge/docker-%25.svg?style=flat&logo=docker&logoColor=white&color=2496ED)
 
 ## Requirements
 
@@ -31,6 +30,32 @@ Easy to use Movie/TV Show torrent aggregator
         - Movies are auto removed
         - TV Shows stay indefinitely (currently)
 
+## Installing and Running
+
+1) Install and
+   setup [Plex Media Server](https://www.plex.tv/media-server-downloads/?cat=computer&plat=windows#plex-media-server)
+2) Deploy [Postgresql](https://www.postgresql.org/download/) database (almost every version should work) (local or
+   3rd-party hosting works)
+3) Install and setup [qBittorrent](https://www.qbittorrent.org/download) with WebUI enabled (adjust config.json with
+   your webui settings)
+4) Extract release files and place into a folder of your choice (eg, C:\roundup)
+5) Configure the config.json file
+6) Run roundup executable
+7) visit http://127.0.0.1:80/ or https://127.0.0.1:443/ if TLS is setup. (or the ip for server you've deployed roundup
+   on.)
+
+## Build from source
+
+1) [Install Rust](https://www.rust-lang.org/tools/install)
+2) `cargo build --release` or `cargo run --release`
+    1) build is located at `target/release/roundup.exe`
+
+## Using PWA
+
+If you wish to use PWA for your mobile devices, you must setup TLS support, PWA doesn't like to work on non-public
+facing servers, so you may get insecure connection errors on your browser but it is fine. App Icons also won't work.
+(if someone has a fix, please open a PR)
+
 ## TODO
 
 - Fix episodes on TheRARBG not being shown
@@ -39,7 +64,7 @@ Easy to use Movie/TV Show torrent aggregator
 - Fix IMDB not parsing numbers and other data.
 - Add Season pack support for EZTV
 - Fix no video id for youtube videos
-- Update TheRARBG to use their YAPS API
+- Add TheRARBG YAPS API as an alternative to scraping. (Don't replace as yaps goes down more often than base site)
 
 ## Contribute
 
