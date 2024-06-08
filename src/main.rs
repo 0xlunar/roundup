@@ -43,23 +43,6 @@ async fn main() -> anyhow::Result<()> {
         false => info!("Using The MovieDB"),
     };
 
-    let mut certs_file = BufReader::new(File::open("./cert.pem").unwrap());
-    let mut key_file = BufReader::new(File::open("./key.pem").unwrap());
-
-    let tls_certs = rustls_pemfile::certs(&mut certs_file)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-
-    let tls_key = rustls_pemfile::pkcs8_private_keys(&mut key_file)
-        .next()
-        .unwrap()
-        .unwrap();
-
-    let tls_config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(tls_certs, rustls::pki_types::PrivateKeyDer::Pkcs8(tls_key))
-        .unwrap();
-
     // This is to trigger a fresh check on launch for first time of request type
     let mut twelve_hour_ago: DateTime<Local> = Local::now();
     twelve_hour_ago = twelve_hour_ago
@@ -75,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
         &config.qbittorrent_url,
         config.minimum_quality,
         torrent_tx.clone(),
-        config.trackers.clone()
+        config.trackers.clone(),
     )
     .await;
 
@@ -155,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
     let plex_session = Data::new(plex_session);
     let torrent_client = Data::from(torrent_client);
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .app_data(Data::clone(&cache_update))
@@ -173,10 +156,33 @@ async fn main() -> anyhow::Result<()> {
             .service(server::download::find_download)
             .service(server::download::start_download_post)
     })
-    .bind(("0.0.0.0", 80))?
-    .bind_rustls_0_22(("0.0.0.0", 443), tls_config)?
-    .run()
-    .await?;
+    .bind(("0.0.0.0", 80))?;
+
+    let certs_file = File::open("./cert.pem");
+    let key_file = File::open("./key.pem");
+    let server = if certs_file.is_ok() && key_file.is_ok() {
+        let mut certs_file = BufReader::new(certs_file.unwrap());
+        let mut key_file = BufReader::new(key_file.unwrap());
+
+        let tls_certs = rustls_pemfile::certs(&mut certs_file)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        let tls_key = rustls_pemfile::pkcs8_private_keys(&mut key_file)
+            .next()
+            .unwrap()
+            .unwrap();
+
+        let tls_config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(tls_certs, rustls::pki_types::PrivateKeyDer::Pkcs8(tls_key))
+            .unwrap();
+        server.bind_rustls_0_22(("0.0.0.0", 443), tls_config)?
+    } else {
+        server
+    };
+
+    server.run().await?;
 
     watchlist_task.await?;
     torrent_watcher.await?;
@@ -196,7 +202,7 @@ struct AppConfigImport {
     tmdb_api_key: String,
     watchlist_recheck_interval_hours: i64,
     #[serde(default)]
-    trackers: Vec<String>
+    trackers: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -210,7 +216,7 @@ struct AppConfig {
     youtube_api_key: String,
     tmdb_api_key: String,
     watchlist_recheck_interval_hours: i64,
-    trackers: Vec<String>
+    trackers: Vec<String>,
 }
 
 impl AppConfig {
