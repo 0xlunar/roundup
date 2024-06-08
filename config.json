@@ -1,5 +1,5 @@
 {
-  "qbittorrent_url": "http://127.0.0.1:9998",
+  "qbittorrent_url": "http://127.0.0.1:8080",
   "qbittorrent_username": "admin",
   "qbittorrent_password": "",
   "db_url": "",
