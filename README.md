@@ -66,6 +66,11 @@ file it will default to IMDb instead.
 Simply by adding an API Key for Youtube they should start to appear in your searches.
 Note: Some trailers may not show for various reasons.
 
+## Trackers
+
+Currently, you will need to supply your own trackers for YTS, the other sites include their own in their magnets.
+You can set them in the config.json file or in qBittorrent settings.
+
 ## TODO
 
 - Fix episodes on TheRARBG not being shown
