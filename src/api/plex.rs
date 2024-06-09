@@ -1,11 +1,11 @@
 use std::ops::Not;
 
 use anyhow::format_err;
+use rayon::prelude::*;
 use regex::Regex;
 use reqwest::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct Episode {
@@ -55,10 +55,11 @@ impl Plex {
 
         let path: PathBuf = "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Preferences.xml".into();
         let xml_file = fs::read_to_string(path)?;
-        let xml = Element::parse(xml_file)?;
-        let token = xml.get_child("PlexOnlineToken")?.get_text()?;
+        let xml = Element::parse(xml_file.as_bytes())?;
+        let token = xml.get_child("PlexOnlineToken").unwrap();
+        let token_text = token.get_text().unwrap();
 
-        Ok(token.to_string())
+        Ok(token_text.to_string())
     }
 
     pub async fn exists_in_library(

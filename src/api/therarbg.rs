@@ -91,7 +91,8 @@ impl TheRARBG {
                     Some(t) => match t.trim() {
                         "TV" => ItemType::TvShow,
                         "Movies" => ItemType::Movie,
-                        _ => continue, // Unknown or category could contain either type (Anime could be Tv Show or Movie)
+                        "Anime" => ItemType::TvShow, // Most likely?
+                        _ => continue, // Unknown or category could contain either type
                     },
                     None => continue,
                 },
