@@ -78,16 +78,6 @@ Note: Some trailers may not show for various reasons.
 Currently, you will need to supply your own trackers for YTS, the other sites include their own in their magnets.
 You can set them in the config.json file or in qBittorrent settings.
 
-## TODO
-
-- Fix episodes on TheRARBG not being shown
-    - Ensure additional pages are being checked
-- Fix TheRARBG not parsing certain torrents
-- Fix IMDB not parsing numbers and other data.
-- Add Season pack support for EZTV
-- Fix no video id for youtube videos
-- Add TheRARBG YAPS API as an alternative to scraping. (Don't replace as yaps goes down more often than base site)
-
 ## Contribute
 
 If you are looking to contribute to the project, please fork and make pull requests to be reviewed.
