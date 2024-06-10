@@ -13,7 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [ x86_64-pc-windows-gnu, x86_64-unknown-linux-musl ]
+        include:
+          - target: x86_64-pc-windows-gnu
+            archive: zip
+          - target: x86_64-unknown-linux-musl
+            archive: tar.gz tar.xz tar.zst
     steps:
       - uses: actions/checkout@master
       - name: Compile and release
@@ -24,3 +28,10 @@ jobs:
           RUSTTARGET: ${{ matrix.target }}
           TOOLCHAIN_VERSION: stable
           EXTRA_FILES: "README.md LICENSE config.json static/favicon.ico static/index.html static/manifest.json static/styles.css"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Binary
+          path: |
+            ${{ steps.compile.outputs.BUILT_ARCHIVE }}
+            ${{ steps.compile.outputs.BUILT_CHECKSUM }}
