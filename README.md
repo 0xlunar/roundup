@@ -30,6 +30,13 @@ Easy to use Movie/TV Show torrent aggregator
         - Movies are auto removed
         - TV Shows stay indefinitely (currently)
 
+## Examples
+
+![homepage](./examples/default_homepage.PNG)
+![search_result_with_modal](./examples/search_result_with_modal.png)
+![search_result_with_modal_downloads](./examples/search_result_with_modal_downloads.png)
+![downloads_page](./examples/downloads_page.PNG)
+
 ## Installing and Running
 
 1) Install and
@@ -41,7 +48,7 @@ Easy to use Movie/TV Show torrent aggregator
 4) Extract release files and place into a folder of your choice (eg, C:\roundup)
 5) Configure the config.json file
 6) Run roundup executable
-7) visit http://127.0.0.1:80/ or https://127.0.0.1:443/ if TLS is setup. (or the ip for server you've deployed roundup
+7) visit http://127.0.0.1:80/ or https://127.0.0.1:443/ if TLS is set up. (or the ip for server you've deployed roundup
    on.)
 
 ## Build from source
@@ -52,18 +59,18 @@ Easy to use Movie/TV Show torrent aggregator
 
 ## Using PWA
 
-If you wish to use PWA for your mobile devices, you must setup TLS support, PWA doesn't like to work on non-public
-facing servers, so you may get insecure connection errors on your browser but it is fine. App Icons also won't work.
+If you wish to use PWA for your mobile devices, you must set up TLS support, PWA doesn't like to work on non-public
+facing servers, so you may get insecure connection errors on your browser, but it is fine. App Icons also won't work.
 (if someone has a fix, please open a PR)
 
 ## Notice about TheMovieDB
 
-Currently it is not fully setup, and should not be used in it's current state. By not supplying an API Key in the config
+Currently, it is not fully setup, and should not be used in its current state. By not supplying an API Key in the config
 file it will default to IMDb instead.
 
 ## Trailers not working?
 
-Simply by adding an API Key for Youtube they should start to appear in your searches.
+Simply by adding an API Key for YouTube they should start to appear in your searches.
 Note: Some trailers may not show for various reasons.
 
 ## Trackers
