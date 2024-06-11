@@ -1,5 +1,3 @@
-use std::ops::Not;
-
 use actix_web::http::header::HeaderValue;
 use anyhow::format_err;
 use async_trait::async_trait;
@@ -59,14 +57,7 @@ impl TheRARBG {
         &self,
         html: String,
         tv_episodes: Option<&Vec<IMDBEpisode>>,
-    ) -> Vec<(
-        String,
-        MediaQuality,
-        ItemType,
-        Option<i32>,
-        Option<i32>,
-        u32,
-    )> {
+    ) -> Vec<TheRARBGItem> {
         let html = Html::parse_document(&html);
         let table_rows_selector = Selector::parse("tbody > tr").unwrap();
         let row_name_selector =
@@ -206,13 +197,22 @@ impl TheRARBG {
 
             let url = match row.select(&row_name_selector).next() {
                 Some(t) => match t.value().attr("href") {
-                    Some(t) => t,
+                    Some(t) => t.to_string(),
                     None => continue,
                 },
                 None => continue,
             };
+            
+            let data = TheRARBGItem {
+                url,
+                media_quality: quality,
+                _type: media_type,
+                season,
+                episode,
+                seeds,
+            };
 
-            urls.push((url.to_string(), quality, media_type, season, episode, seeds));
+            urls.push(data);
         }
 
         urls
@@ -221,14 +221,9 @@ impl TheRARBG {
     async fn fetch_torrent_data(
         &self,
         imdb_id: String,
-        url: String,
-        media_quality: MediaQuality,
-        item_type: ItemType,
-        season: Option<i32>,
-        episode: Option<i32>,
-        seeds: u32,
+        item: TheRARBGItem,
     ) -> anyhow::Result<TorrentItem> {
-        let url = format!("{}{}", self.base_url(), url);
+        let url = format!("{}{}", self.base_url(), item.url);
         let resp = self.client.get(url).send().await?;
         if resp.status().is_server_error() || resp.status().is_client_error() {
             return Err(format_err!("Failed to send request: {}", resp.status()));
@@ -238,11 +233,7 @@ impl TheRARBG {
         let output = self.parse_torrent_page(
             imdb_id,
             text,
-            media_quality,
-            item_type,
-            season,
-            episode,
-            seeds,
+            &item
         )?;
 
         Ok(output)
@@ -252,11 +243,7 @@ impl TheRARBG {
         &self,
         imdb_id: String,
         html: String,
-        media_quality: MediaQuality,
-        item_type: ItemType,
-        season: Option<i32>,
-        episode: Option<i32>,
-        seeds: u32,
+        item: &TheRARBGItem
     ) -> anyhow::Result<TorrentItem> {
         let html = Html::parse_document(&html);
 
@@ -302,11 +289,11 @@ impl TheRARBG {
                             imdb_id,
                             name,
                             magnet_uri,
-                            quality: media_quality,
-                            _type: item_type,
-                            season,
-                            episode,
-                            seeds: Some(seeds),
+                            quality: item.media_quality,
+                            _type: item._type.clone(),
+                            season: item.season,
+                            episode: item.episode,
+                            seeds: Some(item.seeds),
                         })
                     }
                     _ => break,
@@ -353,7 +340,7 @@ impl TorrentSearch for TheRARBG {
         // TODO: See if we can add Rayon into_par_iter() here.
         let tasks = outputs
             .into_iter()
-            .map(|t| self.fetch_torrent_data(imdb_id.clone(), t.0, t.1, t.2, t.3, t.4, t.5));
+            .map(|t| self.fetch_torrent_data(imdb_id.clone(), t));
 
         let tasks = futures::future::join_all(tasks).await;
         let mut torrents = Vec::new();
@@ -428,4 +415,13 @@ impl TorrentSearch for TheRARBG {
         }
         Ok(torrents)
     }
+}
+
+struct TheRARBGItem {
+    url: String,
+    media_quality: MediaQuality,
+    _type: ItemType,
+    season: Option<i32>,
+    episode: Option<i32>,
+    seeds: u32,
 }
