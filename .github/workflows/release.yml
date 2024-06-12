@@ -26,9 +26,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           RUSTTARGET: ${{ matrix.target }}
+          ARCHIVE_TYPES: ${{ matrix.archive }}
           TOOLCHAIN_VERSION: stable
           EXTRA_FILES: "README.md LICENSE config.json static/favicon.ico static/index.html static/manifest.json static/styles.css"
-          UPLOAD_MODE: none
+          UPLOAD_MODE: release
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
