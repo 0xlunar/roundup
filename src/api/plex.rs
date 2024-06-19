@@ -56,23 +56,22 @@ impl Plex {
         let path: PathBuf = "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Preferences.xml".into();
         let xml_file = fs::read_to_string(path)?;
         let xml = Element::parse(xml_file.as_bytes())?;
-        let token = xml.get_child("PlexOnlineToken").unwrap();
-        let token_text = token.get_text().unwrap();
+        let token = xml.attributes.get("PlexOnlineToken").unwrap();
 
-        Ok(token_text.to_string())
+        Ok(token.to_string())
     }
 
     #[cfg(target_os = "macos")]
     fn get_plex_auth_token() -> anyhow::Result<String> {
-        use std::path::PathBuf;
         use plist;
+        use std::path::PathBuf;
 
         #[derive(Deserialize)]
         struct MacOSPlexPlist {
             #[serde(rename = "PlexOnlineToken")]
             plex_online_token: String,
         }
-        
+
         let path: PathBuf = "~/Library/Preferences/com.plexapp.plexmediaserver.plist".into();
         let plist_file: MacOSPlexPlist = plist::from_file(path)?;
         Ok(plist_file.plex_online_token)
@@ -358,4 +357,3 @@ struct PlexTVMetadata {
     #[serde(rename = "Media", default)]
     media: Vec<MetadataMedia>,
 }
-
