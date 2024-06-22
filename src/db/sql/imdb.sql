@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS imdb
     year                BIGINT      NOT NULL DEFAULT 0,
     image_url           TEXT        NOT NULL,
     rating              TEXT        NOT NULL DEFAULT 'TBD',
-    runtime             INTEGER              DEFAULT NULL,
+    runtime             BIGINT               DEFAULT NULL,
     video_thumbnail_url TEXT                 DEFAULT NULL,
     video_url           TEXT                 DEFAULT NULL,
     plot                TEXT                 DEFAULT NULL,
