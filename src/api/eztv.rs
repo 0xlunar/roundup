@@ -126,7 +126,11 @@ impl TorrentSearch for EZTV {
                     _ => MediaQuality::Unknown,
                 };
                 let season = t.season.parse::<i32>().unwrap();
-                let episode = t.episode.parse::<i32>().unwrap();
+                let mut episode = t.episode.parse::<i32>().unwrap();
+                
+                if t.title.to_lowercase().contains("complete") && episode == 0 {
+                    episode = -1;
+                }
 
                 let q_s = quality.to_string();
                 let mut title = t
