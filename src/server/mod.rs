@@ -1,9 +1,12 @@
 use std::path::PathBuf;
+
 use actix_files::NamedFile;
 use actix_web::{Error, get};
 
-pub mod query;
+pub mod auth;
 pub mod download;
+pub mod middleware;
+pub mod query;
 
 #[get("/")]
 pub async fn index() -> Result<NamedFile, Error> {

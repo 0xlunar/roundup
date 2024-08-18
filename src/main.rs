@@ -5,11 +5,21 @@ use std::ops::Not;
 use std::sync::Arc;
 use std::time::Duration;
 
+use actix_session::SessionMiddleware;
 use actix_web::{App, HttpServer};
+use actix_web::cookie::Key;
 use actix_web::middleware::Logger;
 use actix_web::web::Data;
 use chrono::{DateTime, Local};
 use log::{error, info, warn};
+use oauth2::{
+    AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
+    RevocationUrl, StandardRevocableToken, TokenUrl,
+};
+use oauth2::basic::{
+    BasicClient, BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse,
+    BasicTokenResponse,
+};
 use qbittorrent::Api;
 use qbittorrent::data::{Hash, State, Torrent};
 use qbittorrent::traits::TorrentData;
@@ -23,6 +33,7 @@ use crate::api::torrent::MediaQuality;
 use crate::db::DBConnection;
 use crate::db::downloads::DownloadDatabase;
 use crate::db::initialiser::DatabaseInitialiser;
+use crate::db::session_psql::PostgreSQLSessionStore;
 
 mod api;
 mod db;
@@ -36,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
     if cfg!(debug_assertions) {
         console_subscriber::init();
     }
-    let config = AppConfig::load();
+    let mut config = AppConfig::load();
 
     match config.tmdb_api_key.is_empty() {
         true => info!("Using IMDB"),
@@ -74,6 +85,11 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    let session_store = match config.db_url.is_empty() {
+        true => PostgreSQLSessionStore::from_env("DB_URI").await?,
+        false => PostgreSQLSessionStore::new(&config.db_url).await?,
+    };
+
     let cache_update: QueryCache = vec![
         (SearchType::MoviePopular, twelve_hour_ago.to_owned()),
         (SearchType::MovieLatestRelease, twelve_hour_ago.to_owned()),
@@ -83,6 +99,11 @@ async fn main() -> anyhow::Result<()> {
 
     let youtube = api::youtube::Youtube::new(&config.youtube_api_key);
     let db_conn = Data::new(db_conn);
+
+    let google_client_id = config.google_client_id;
+    config.google_client_id = None;
+    let google_client_secret = config.google_client_secret;
+    config.google_client_secret = None;
     let app_config = Data::new(config);
 
     let app_config_clone = Data::clone(&app_config);
@@ -138,9 +159,61 @@ async fn main() -> anyhow::Result<()> {
     let plex_session = Data::new(plex_session);
     let torrent_client = Data::from(torrent_client);
 
+    let app_secret = Key::generate();
+
+    let oauth_client = if google_client_id.is_some() && google_client_secret.is_some() {
+        info!("Authentication Enabled");
+        let id = google_client_id.unwrap();
+        let google_client_id = ClientId::new(id);
+        let secret = google_client_secret.unwrap();
+        let google_client_secret = ClientSecret::new(secret);
+        let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())
+            .expect("Invalid authorisation endpoint url");
+        let token_url = TokenUrl::new("https://www.googleapis.com/oauth2/v3/token".to_string())
+            .expect("Invalid token endpoint url");
+        let redirect_url = RedirectUrl::new("https://localhost/auth_callback".to_string())
+            .expect("Invalid redirect endpoint url");
+        let revocation_url = RevocationUrl::new("https://oauth2.googleapis.com/revoke".to_string())
+            .expect("Invalid revocation endpoint url");
+
+        let client: Client<
+            BasicErrorResponse,
+            BasicTokenResponse,
+            BasicTokenIntrospectionResponse,
+            StandardRevocableToken,
+            BasicRevocationErrorResponse,
+            EndpointSet,
+            EndpointNotSet,
+            EndpointNotSet,
+            EndpointSet,
+            EndpointSet,
+        > = BasicClient::new(google_client_id)
+            .set_client_secret(google_client_secret)
+            .set_auth_uri(auth_url)
+            .set_token_uri(token_url)
+            .set_redirect_uri(redirect_url)
+            .set_revocation_url(revocation_url);
+
+        Data::new(Some(client))
+    } else {
+        warn!("Authentication Disabled, supply a Google Client Id and Secret in the config to enable.");
+
+        drop(google_client_id);
+        drop(google_client_secret);
+        Data::new(None)
+    };
+
     let server = HttpServer::new(move || {
         App::new()
+            .wrap(server::middleware::has_auth::HasAuthorisation)
+            .wrap(
+                SessionMiddleware::builder(session_store.clone(), app_secret.clone())
+                    .cookie_name("roundup".to_string())
+                    .cookie_secure(true)
+                    .build(),
+            )
             .wrap(Logger::default())
+            .app_data(Data::clone(&oauth_client))
             .app_data(Data::clone(&cache_update))
             .app_data(Data::clone(&db_conn))
             .app_data(Data::clone(&plex_session))
@@ -155,6 +228,8 @@ async fn main() -> anyhow::Result<()> {
             .service(server::download::start_download)
             .service(server::download::find_download)
             .service(server::download::start_download_post)
+            .service(server::auth::auth_get)
+            .service(server::auth::auth_callback)
     })
     .bind(("0.0.0.0", 80))?;
 
@@ -191,21 +266,6 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct AppConfigImport {
-    qbittorrent_url: String,
-    qbittorrent_username: String,
-    qbittorrent_password: String,
-    db_url: String,
-    valid_file_types: Vec<String>,
-    minimum_quality: String,
-    youtube_api_key: String,
-    tmdb_api_key: String,
-    watchlist_recheck_interval_hours: i64,
-    #[serde(default)]
-    trackers: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
 struct AppConfig {
     qbittorrent_url: String,
     qbittorrent_username: String,
@@ -217,36 +277,14 @@ struct AppConfig {
     tmdb_api_key: String,
     watchlist_recheck_interval_hours: i64,
     trackers: Vec<String>,
+    google_client_id: Option<String>,
+    google_client_secret: Option<String>,
 }
 
 impl AppConfig {
     pub fn load() -> AppConfig {
         let buffer = fs::read_to_string("./config.json").unwrap();
-
-        let imported: AppConfigImport = serde_json::from_str(&buffer).unwrap();
-
-        let config = AppConfig {
-            qbittorrent_url: imported.qbittorrent_url,
-            qbittorrent_username: imported.qbittorrent_username,
-            qbittorrent_password: imported.qbittorrent_password,
-            db_url: imported.db_url,
-            valid_file_types: imported.valid_file_types,
-            minimum_quality: match imported.minimum_quality.as_str() {
-                "cam" => MediaQuality::Cam,
-                "telesync" | "ts" | "tele-sync" => MediaQuality::Telesync,
-                "720p" | "720" => MediaQuality::_720p,
-                "1080p" | "1080" => MediaQuality::_1080p,
-                "2160p" | "2160" | "4k" => MediaQuality::_2160p,
-                "4320p" | "4320" | "8K" => MediaQuality::_4320p,
-                _ => MediaQuality::Unknown,
-            },
-            youtube_api_key: imported.youtube_api_key,
-            tmdb_api_key: imported.tmdb_api_key,
-            watchlist_recheck_interval_hours: imported.watchlist_recheck_interval_hours,
-            trackers: imported.trackers,
-        };
-
-        config
+        serde_json::from_str(&buffer).unwrap()
     }
 }
 

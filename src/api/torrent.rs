@@ -6,9 +6,9 @@ use anyhow::format_err;
 use async_trait::async_trait;
 use log::warn;
 use qbittorrent::queries::TorrentDownload;
-use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::UnboundedSender;
 use rayon::prelude::*;
+use serde::{Deserialize, Deserializer, Serialize};
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
 
@@ -22,7 +22,7 @@ pub trait TorrentSearch: Send {
     ) -> anyhow::Result<Vec<TorrentItem>>;
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd, Copy, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, Ord, PartialOrd, Copy, Clone)]
 pub enum MediaQuality {
     #[serde(alias = "unknown")]
     Unknown,
@@ -42,6 +42,26 @@ pub enum MediaQuality {
     _2160p, // 4K
     #[serde(alias = "4320p", alias = "8k", alias = "8K")]
     _4320p, // 8K
+}
+
+impl<'de> Deserialize<'de> for MediaQuality {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let data = String::deserialize(deserializer)?.to_lowercase();
+        let site = match data.as_str() {
+            "cam" => MediaQuality::Cam,
+            "telesync" | "ts" | "tele-sync" => MediaQuality::Telesync,
+            "720p" | "720" => MediaQuality::_720p,
+            "1080p" | "1080" => MediaQuality::_1080p,
+            "2160p" | "2160" | "4k" => MediaQuality::_2160p,
+            "4320p" | "4320" | "8K" => MediaQuality::_4320p,
+            _ => MediaQuality::Unknown,
+        };
+
+        Ok(site)
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -87,7 +107,7 @@ pub struct Torrenter {
     client: qbittorrent::Api,
     mpsc: UnboundedSender<String>,
     min_quality: MediaQuality,
-    trackers: Vec<String>
+    trackers: Vec<String>,
 }
 impl Torrenter {
     pub async fn new(
@@ -96,7 +116,7 @@ impl Torrenter {
         address: &str,
         min_quality: MediaQuality,
         mpsc_sender: UnboundedSender<String>,
-        trackers: Vec<String>
+        trackers: Vec<String>,
     ) -> Self {
         let client = qbittorrent::Api::new(username, password, address)
             .await
@@ -106,7 +126,7 @@ impl Torrenter {
             client,
             min_quality,
             mpsc: mpsc_sender,
-            trackers
+            trackers,
         }
     }
 
@@ -117,9 +137,9 @@ impl Torrenter {
         tv_episodes: Option<Vec<IMDBEpisode>>,
     ) -> anyhow::Result<Vec<TorrentItem>> {
         let ordering: Vec<Box<dyn TorrentSearch>> = vec![
-            crate::api::yts::YTS::new(&self.trackers),  // Movie
-            crate::api::eztv::EZTV::new(),              // TV
-            crate::api::therarbg::TheRARBG::new(),      // Any
+            crate::api::yts::YTS::new(&self.trackers), // Movie
+            crate::api::eztv::EZTV::new(),             // TV
+            crate::api::therarbg::TheRARBG::new(),     // Any
         ];
 
         for site in ordering {

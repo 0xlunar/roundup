@@ -16,5 +16,7 @@
   "youtube_api_key": "",
   "tmdb_api_key": "",
   "watchlist_recheck_interval_hours": 6,
-  "trackers": []
+  "trackers": [],
+  "google_client_id": "",
+  "google_client_secret": ""
 }

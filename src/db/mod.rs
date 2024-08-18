@@ -4,6 +4,9 @@ pub mod downloads;
 pub mod imdb;
 pub mod initialiser;
 pub mod moviedb;
+pub mod oauth;
+pub mod session_psql;
+pub mod user;
 
 #[derive(Clone)]
 pub struct DBConnection {

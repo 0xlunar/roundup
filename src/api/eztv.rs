@@ -1,11 +1,10 @@
 use std::ops::Not;
 
-use actix_web::http::header::HeaderValue;
 use anyhow::format_err;
 use async_trait::async_trait;
 use rayon::prelude::*;
 use reqwest::{Client, ClientBuilder};
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 
 use crate::api::imdb::{IMDBEpisode, ItemType};

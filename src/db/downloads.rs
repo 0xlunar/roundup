@@ -4,7 +4,7 @@ use chrono::Local;
 use qbittorrent::data::Hash;
 use rayon::prelude::*;
 use serde::Serialize;
-use sqlx::{Postgres, QueryBuilder, Row};
+use sqlx::{Postgres, QueryBuilder};
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
 use crate::api::torrent::MediaQuality;
