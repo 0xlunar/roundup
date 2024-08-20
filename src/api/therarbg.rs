@@ -1,10 +1,9 @@
-use actix_web::http::header::HeaderValue;
 use anyhow::format_err;
 use async_trait::async_trait;
 use log::{debug, error, info};
 use rayon::prelude::*;
 use reqwest::{Client, ClientBuilder};
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderValue};
 use scraper::{Html, Selector};
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
@@ -101,8 +100,8 @@ impl TheRARBG {
                 },
                 None => continue,
             };
-
-            let negative_keywords = ["hdcam", "hdts", "ts", "cam", "camrip", "telesync", "tsx"]; // I don't care for cams/telesyncs, update these if you like them.
+            
+            let negative_keywords = ["hdcam", "hdts", "ts", "cam", "camrip", "telesync", "tsx", "broski"]; // I don't care for cams/telesyncs, update these if you like them.
 
             let split_name = name
                 .split(' ')
