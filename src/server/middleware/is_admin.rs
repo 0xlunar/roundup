@@ -18,9 +18,9 @@ use oauth2::basic::{
 use crate::db::DBConnection;
 use crate::db::user::{UserDatabase, UserType};
 
-pub struct HasAuthorisation;
+pub struct IsAdmin;
 
-impl<S, B> Transform<S, ServiceRequest> for HasAuthorisation
+impl<S, B> Transform<S, ServiceRequest> for IsAdmin
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
@@ -28,16 +28,16 @@ where
 {
     type Response = ServiceResponse<EitherBody<B>>;
     type Error = Error;
-    type Transform = HasAuthorisationMiddleware<S>;
+    type Transform = IsAdminMiddleware<S>;
     type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(HasAuthorisationMiddleware { service }))
+        ready(Ok(IsAdminMiddleware { service }))
     }
 }
 
-pub struct HasAuthorisationMiddleware<S> {
+pub struct IsAdminMiddleware<S> {
     service: S,
 }
 
@@ -47,7 +47,7 @@ pub struct HasAuthorisationMiddleware<S> {
 
 // `S`: type of the wrapped service
 // `B`: type of the body - try to be generic over the body where possible
-impl<S, B> Service<ServiceRequest> for HasAuthorisationMiddleware<S>
+impl<S, B> Service<ServiceRequest> for IsAdminMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
@@ -107,68 +107,21 @@ where
             }
         };
 
-        let has_auth = has_auth(&req);
-        if has_auth {
-            if req.path() == "/auth" || req.path() == "/auth_callback" {
-                let res = HttpResponse::Found()
-                    .insert_header(("Location", "/"))
-                    .finish();
-                let (http_req, _) = req.into_parts();
-                let res = ServiceResponse::new(http_req, res);
-                Box::pin(async move { Ok(res.map_into_right_body()) })
-            } else {
-                let fut = self.service.call(req);
-                Box::pin(async move {
-                    let res = fut.await?;
-                    Ok(res.map_into_left_body())
-                })
-            }
+        let is_admin = is_admin(&req);
+        if is_admin {
+            let fut = self.service.call(req);
+            Box::pin(async move {
+                let res = fut.await?;
+                Ok(res.map_into_left_body())
+            })
         } else {
-            if req.path() == "/auth" || req.path() == "/auth_callback" {
-                let fut = self.service.call(req);
-                Box::pin(async move {
-                    let res = fut.await?;
-                    Ok(res.map_into_left_body())
-                })
-            } else {
-                let res = HttpResponse::Found()
-                    .insert_header(("Location", "/auth"))
-                    .finish();
-                let (http_req, _) = req.into_parts();
-                let res = ServiceResponse::new(http_req, res);
-                Box::pin(async move { Ok(res.map_into_right_body()) })
-            }
+            let res = HttpResponse::Found()
+                .insert_header(("Location", "/"))
+                .finish();
+            let (http_req, _) = req.into_parts();
+            let res = ServiceResponse::new(http_req, res);
+            Box::pin(async move { Ok(res.map_into_right_body()) })
         }
-    }
-}
-
-fn has_auth(req: &ServiceRequest) -> bool {
-    let session = req.get_session();
-    let email = match session.get::<String>("email") {
-        Ok(email) => email,
-        Err(err) => {
-            error!("{}", err);
-            return false;
-        }
-    };
-    match email {
-        Some(email) => {
-            let db = req.app_data::<Data<DBConnection>>().unwrap();
-            let user_db = UserDatabase::new(db);
-
-            let db_result =
-                futures::executor::block_on(async { user_db.fetch_by_email(&email).await });
-            let db_result = match db_result {
-                Ok(user) => user,
-                Err(_) => return false,
-            };
-
-            match db_result {
-                Some(_) => true,
-                None => false,
-            }
-        }
-        None => false,
     }
 }
 

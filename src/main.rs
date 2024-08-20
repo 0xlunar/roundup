@@ -11,7 +11,12 @@ use actix_web::cookie::Key;
 use actix_web::middleware::Logger;
 use actix_web::web::Data;
 use chrono::{DateTime, Local};
-use log::{error, info, warn};
+use log::{error, info, LevelFilter, warn};
+use log4rs::append::console::ConsoleAppender;
+use log4rs::append::file::FileAppender;
+use log4rs::config::{Appender, Root};
+use log4rs::Config;
+use log4rs::encode::pattern::PatternEncoder;
 use oauth2::{
     AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
     RevocationUrl, StandardRevocableToken, TokenUrl,
@@ -43,7 +48,29 @@ pub type QueryCache = Vec<(SearchType, DateTime<Local>)>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    let logfile = FileAppender::builder().build("log/output.log")?;
+
+    let config = Config::builder()
+        .appenders(vec![
+            Appender::builder().build(
+                "stdout",
+                Box::new(
+                    ConsoleAppender::builder()
+                        .encoder(Box::new(PatternEncoder::new(
+                            "[{d(%s)} {h({l})} {t}] {m}{n}",
+                        )))
+                        .build(),
+                ),
+            ),
+            Appender::builder().build("logfile", Box::new(logfile)),
+        ])
+        .build(
+            Root::builder()
+                .appenders(vec!["stdout", "logfile"])
+                .build(LevelFilter::Info),
+        )?;
+    log4rs::init_config(config)?;
+
     if cfg!(debug_assertions) {
         console_subscriber::init();
     }
