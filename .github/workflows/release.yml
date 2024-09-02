@@ -1,8 +1,10 @@
-name: Release
+permissions:
+  contents: write
 
 on:
-  release:
-    types: [ created ]
+  push:
+    tags:
+      - "v*.*.*"
 
 jobs:
   release:
@@ -19,7 +21,8 @@ jobs:
             archive: tar.gz tar.xz tar.zst
     steps:
       - uses: actions/checkout@master
-      - name: Compile and release
+      - name: Compile
+        id: compile
         uses: rust-build/rust-build.action@v1.4.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
