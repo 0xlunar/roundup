@@ -4,7 +4,8 @@ use std::ops::Not;
 
 use anyhow::format_err;
 use async_trait::async_trait;
-use log::warn;
+use log::{error, warn};
+use qbittorrent::{Api, Error};
 use qbittorrent::queries::TorrentDownload;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
@@ -90,6 +91,7 @@ pub struct Torrenter {
     trackers: Vec<String>
 }
 impl Torrenter {
+    // Blocks until successful
     pub async fn new(
         username: &str,
         password: &str,
@@ -98,9 +100,20 @@ impl Torrenter {
         mpsc_sender: UnboundedSender<String>,
         trackers: Vec<String>
     ) -> Self {
-        let client = qbittorrent::Api::new(username, password, address)
-            .await
-            .unwrap();
+        let mut client = None;
+        while client.is_none() {
+            match qbittorrent::Api::new(username, password, address)
+                .await {
+                Ok(c) => {
+                    client = Some(c);
+                    break;
+                }
+                Err(err) => {
+                    error!("Waiting for qBittorrent to start... err: {}", err);
+                }
+            }
+        }
+        let client = client.unwrap();
 
         Self {
             client,
