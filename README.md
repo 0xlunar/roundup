@@ -16,7 +16,6 @@ Easy to use Movie/TV Show torrent aggregator
 - Postgresql/Docker
 - Plex Media Server
 - qBittorrent
-- Windows (linux support at some point)
 
 ## Features
 

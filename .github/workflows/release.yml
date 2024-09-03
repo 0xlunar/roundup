@@ -35,7 +35,7 @@ jobs:
       - name: Upload artifact
         uses: softprops/action-gh-release@v2
         with:
-          name: Binary
+          name: Release
           files: |
             ${{ steps.compile.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile.outputs.BUILT_CHECKSUM }}
