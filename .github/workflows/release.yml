@@ -33,9 +33,9 @@ jobs:
           EXTRA_FILES: "README.md LICENSE config.json static/favicon.ico static/index.html static/manifest.json static/styles.css"
           UPLOAD_MODE: release
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: softprops/action-gh-release@v2
         with:
           name: Binary
-          path: |
+          files: |
             ${{ steps.compile.outputs.BUILT_ARCHIVE }}
             ${{ steps.compile.outputs.BUILT_CHECKSUM }}
