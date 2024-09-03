@@ -40,7 +40,7 @@ Easy to use Movie/TV Show torrent aggregator
 
 1) Install and
    setup [Plex Media Server](https://www.plex.tv/media-server-downloads/?cat=computer&plat=windows#plex-media-server)
-2) Deploy [Postgresql](https://www.postgresql.org/download/) database (almost every version should work) (local or
+2) Deploy [Postgresql](https://www.postgresql.org/download/) database (almost any modern version should work) (local or
    3rd-party hosting works)
 3) Install and setup [qBittorrent](https://www.qbittorrent.org/download) with WebUI enabled (adjust config.json with
    your webui settings)
