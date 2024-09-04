@@ -60,15 +60,16 @@
     <div id="search-results" hx-get="/search?type=movie&mode=popular" hx-trigger="load"
          hx-indicator="#load-spinner-results" style="width: 100%"></div>
 </div>
+<script
+        src="https://code.jquery.com/jquery-3.7.1.slim.min.js"
+        integrity="sha256-kmHvs0B+OpCW5GVHUNjv9rOmY0IvSIRcf7zGUDTDQM8="
+        crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous"></script>
 <script>
-    document.body.addEventListener('htmx:beforeSend', function (evt) {
-        if (evt.detail.pathInfo.requestPath.startsWith("/modal_metadata")) {
-            const download_select = document.querySelector("#download-select");
-            download_select.innerHTML = '<div id="download-select" class="htmx-indicator spinner-border"></div>';
-        }
+    $("#download-modal").on("hidden.bs.modal", function () {
+        $("#download-select")[0].outerHTML = '<div id="download-select" class="htmx-indicator spinner-border"></div>';
     });
 </script>
 </body>
