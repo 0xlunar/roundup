@@ -14,7 +14,7 @@
   ],
   "minimum_quality": "720p",
   "youtube_api_key": "",
-  "tmdb_api_key": "",
   "watchlist_recheck_interval_hours": 6,
-  "trackers": []
+  "trackers": [],
+  "concurrent_torrent_search": false
 }

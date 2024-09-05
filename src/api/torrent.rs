@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use log::{error, warn};
 use qbittorrent::{Api, Error};
 use qbittorrent::queries::TorrentDownload;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
-use rayon::prelude::*;
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
 
@@ -88,7 +88,7 @@ pub struct Torrenter {
     client: qbittorrent::Api,
     mpsc: UnboundedSender<String>,
     min_quality: MediaQuality,
-    trackers: Vec<String>
+    trackers: Vec<String>,
 }
 impl Torrenter {
     // Blocks until successful
@@ -98,12 +98,11 @@ impl Torrenter {
         address: &str,
         min_quality: MediaQuality,
         mpsc_sender: UnboundedSender<String>,
-        trackers: Vec<String>
+        trackers: Vec<String>,
     ) -> Self {
         let mut client = None;
         while client.is_none() {
-            match qbittorrent::Api::new(username, password, address)
-                .await {
+            match qbittorrent::Api::new(username, password, address).await {
                 Ok(c) => {
                     client = Some(c);
                     break;
@@ -119,7 +118,7 @@ impl Torrenter {
             client,
             min_quality,
             mpsc: mpsc_sender,
-            trackers
+            trackers,
         }
     }
 
@@ -128,38 +127,84 @@ impl Torrenter {
         search_term: String,
         imdb_id: Option<String>,
         tv_episodes: Option<Vec<IMDBEpisode>>,
+        concurrent_search: bool,
     ) -> anyhow::Result<Vec<TorrentItem>> {
         let ordering: Vec<Box<dyn TorrentSearch>> = vec![
-            crate::api::yts::YTS::new(&self.trackers),  // Movie
-            crate::api::eztv::EZTV::new(),              // TV
-            crate::api::therarbg::TheRARBG::new(),      // Any
+            crate::api::yts::YTS::new(&self.trackers), // Movie
+            crate::api::eztv::EZTV::new(),             // TV
+            crate::api::therarbg::TheRARBG::new(),     // Any
         ];
 
-        for site in ordering {
-            match site
-                .search(search_term.clone(), imdb_id.clone(), tv_episodes.clone())
-                .await
-            {
-                Ok(r) => {
-                    if r.is_empty() {
-                        continue;
-                    } else {
-                        let filtered = r
-                            .into_par_iter()
-                            .filter(|item| (item.quality as u8) >= (self.min_quality as u8))
-                            .collect::<Vec<TorrentItem>>();
-                        if filtered.is_empty().not() {
-                            return Ok(filtered);
+        if concurrent_search {
+            let search_term = search_term.clone();
+            let imdb_id = imdb_id.clone();
+            let tv_episodes = tv_episodes.clone();
+            let tasks = ordering
+                .into_iter()
+                .map(|site| {
+                    let search_term = search_term.clone();
+                    let imdb_id = imdb_id.clone();
+                    let tv_episodes = tv_episodes.clone();
+                    (site, (search_term, imdb_id, tv_episodes))
+                })
+                .map(|(site, (search_term, imdb_id, tv_episodes))| async move {
+                    site.search(search_term, imdb_id, tv_episodes).await
+                })
+                .collect::<Vec<_>>();
+            
+            let results = futures::future::join_all(tasks).await;
+            let output = results.into_par_iter().filter_map(|task|
+                match task {
+                    Ok(r) => {
+                        if r.is_empty() {
+                            None
                         } else {
-                            continue;
+                            let filtered = r
+                                .into_par_iter()
+                                .filter(|item| (item.quality as u8) >= (self.min_quality as u8))
+                                .collect::<Vec<TorrentItem>>();
+                            if filtered.is_empty().not() {
+                                Some(filtered)
+                            } else {
+                                None
+                            }
                         }
                     }
-                }
-                Err(e) => {
-                    warn!("{}", e);
-                    continue;
-                }
-            };
+                    Err(e) => {
+                        warn!("{}", e);
+                        None
+                    }
+            }).flatten().collect::<Vec<_>>();
+            if output.is_empty().not() {
+                return Ok(output);
+            }
+        } else {
+            for site in ordering {
+                match site
+                    .search(search_term.clone(), imdb_id.clone(), tv_episodes.clone())
+                    .await
+                {
+                    Ok(r) => {
+                        if r.is_empty() {
+                            continue;
+                        } else {
+                            let filtered = r
+                                .into_par_iter()
+                                .filter(|item| (item.quality as u8) >= (self.min_quality as u8))
+                                .collect::<Vec<TorrentItem>>();
+                            if filtered.is_empty().not() {
+                                return Ok(filtered);
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("{}", e);
+                        continue;
+                    }
+                };
+            }
         }
 
         Err(format_err!("No torrents found matching criteria"))

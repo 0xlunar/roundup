@@ -38,11 +38,6 @@ async fn main() -> anyhow::Result<()> {
     }
     let config = AppConfig::load();
 
-    match config.tmdb_api_key.is_empty() {
-        true => info!("Using IMDB"),
-        false => info!("Using The MovieDB"),
-    };
-
     // This is to trigger a fresh check on launch for first time of request type
     let mut twelve_hour_ago: DateTime<Local> = Local::now();
     twelve_hour_ago = twelve_hour_ago
@@ -199,10 +194,10 @@ struct AppConfigImport {
     valid_file_types: Vec<String>,
     minimum_quality: String,
     youtube_api_key: String,
-    tmdb_api_key: String,
     watchlist_recheck_interval_hours: i64,
     #[serde(default)]
     trackers: Vec<String>,
+    concurrent_torrent_search: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -214,9 +209,9 @@ struct AppConfig {
     valid_file_types: Vec<String>,
     minimum_quality: MediaQuality,
     youtube_api_key: String,
-    tmdb_api_key: String,
     watchlist_recheck_interval_hours: i64,
     trackers: Vec<String>,
+    concurrent_torrent_search: bool,
 }
 
 impl AppConfig {
@@ -241,9 +236,9 @@ impl AppConfig {
                 _ => MediaQuality::Unknown,
             },
             youtube_api_key: imported.youtube_api_key,
-            tmdb_api_key: imported.tmdb_api_key,
             watchlist_recheck_interval_hours: imported.watchlist_recheck_interval_hours,
             trackers: imported.trackers,
+            concurrent_torrent_search: imported.concurrent_torrent_search,
         };
 
         config

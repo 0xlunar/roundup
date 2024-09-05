@@ -62,11 +62,6 @@ If you wish to use PWA for your mobile devices, you must set up TLS support, PWA
 facing servers, so you may get insecure connection errors on your browser, but it is fine. App Icons also won't work.
 (if someone has a fix, please open a PR)
 
-## Notice about TheMovieDB
-
-Currently, it is not fully setup, and should not be used in its current state. By not supplying an API Key in the config
-file it will default to IMDb instead.
-
 ## Trailers not working?
 
 Simply by adding an API Key for YouTube they should start to appear in your searches.

@@ -3,7 +3,6 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 pub mod downloads;
 pub mod imdb;
 pub mod initialiser;
-pub mod moviedb;
 
 #[derive(Clone)]
 pub struct DBConnection {

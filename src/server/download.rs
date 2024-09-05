@@ -8,14 +8,12 @@ use rayon::prelude::*;
 use serde::Deserialize;
 
 use crate::api::imdb::{IMDB, IMDBEpisode, ItemType};
-use crate::api::moviedb::MovieDB;
 use crate::api::plex::Plex;
 use crate::api::torrent::{MediaQuality, Torrenter, TorrentItem};
 use crate::AppConfig;
 use crate::db::DBConnection;
 use crate::db::downloads::DownloadDatabase;
 use crate::db::imdb::IMDBDatabase;
-use crate::db::moviedb::MovieDBDatabase;
 
 #[derive(Deserialize)]
 pub struct DownloadQueryParams {
@@ -45,11 +43,11 @@ pub async fn find_download(
     torrenter: Data<Torrenter>,
     app_config: Data<AppConfig>,
 ) -> Result<HttpResponse<String>, Error> {
+    let concurrent_search = app_config.concurrent_torrent_search;
     let missing_tv_episodes = match params._type.as_str() {
         "tv" => {
             match find_missing_tv_shows(
                 plex.clone().into_inner(),
-                app_config,
                 &params.imdb_id,
                 &params.title,
             )
@@ -61,7 +59,7 @@ pub async fn find_download(
         }
         _ => None,
     };
-    
+
     let already_exists = missing_tv_episodes.is_none()
         && match plex.exists_in_library(&params.title, false).await {
             Ok(b) => b,
@@ -70,7 +68,7 @@ pub async fn find_download(
 
     // TODO: Add check to prevent downloading active downloads
     let download_db = DownloadDatabase::new(db.deref());
-    
+
     let imdb_id = match params.imdb_id.starts_with("tt") {
         true => params.imdb_id.to_owned(),
         false => format!("tt{}", params.imdb_id),
@@ -105,6 +103,7 @@ pub async fn find_download(
             params.title.to_owned(),
             Some(params.imdb_id.to_owned()),
             missing_tv_episodes,
+            concurrent_search,
         )
         .await
     {
@@ -178,7 +177,7 @@ fn create_download_modal_options(items: Vec<TorrentItem>) -> String {
                         true => item.imdb_id.clone(),
                         false => format!("tt{}", item.imdb_id),
                     };
-                    
+
                     let episode = item.episode.as_ref().unwrap();
                     if *episode == -1 {
                         let button = format!("\
@@ -193,7 +192,6 @@ fn create_download_modal_options(items: Vec<TorrentItem>) -> String {
                 </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), episode, item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), episode, item.quality);
 
                         output.push_str(&button);
-                        
                     }
                 }
 
@@ -273,34 +271,12 @@ fn button_colour_for_quality(quality: &MediaQuality) -> &'static str {
 
 pub async fn find_missing_tv_shows(
     plex: Arc<Plex>,
-    app_config: Data<AppConfig>,
     imdb_id: &str,
     title: &str,
 ) -> anyhow::Result<Option<Vec<IMDBEpisode>>> {
-    let mut all_episodes = match app_config.tmdb_api_key.is_empty() {
-        true => match IMDB::search_tv_episodes(imdb_id, None, 0, None).await {
-            Ok(t) => t,
-            Err(e) => return Err(e),
-        },
-        false => {
-            match MovieDB::search_tv_episodes(
-                &app_config.tmdb_api_key,
-                imdb_id.parse::<i32>().unwrap(),
-                1,
-            )
-            .await
-            {
-                Ok(t) => t
-                    .par_iter()
-                    .map(|x| IMDBEpisode {
-                        id: "".to_string(),
-                        season: x.season,
-                        episode: x.episode,
-                    })
-                    .collect(),
-                Err(e) => return Err(e),
-            }
-        }
+    let mut all_episodes = match IMDB::search_tv_episodes(imdb_id, None, 0, None).await {
+        Ok(t) => t,
+        Err(e) => return Err(e),
     };
 
     let existing_episodes = match plex.tvshow_exists_in_library(title).await {
@@ -410,35 +386,19 @@ struct UpdateWatchlistQuery {
 pub async fn update_watchlist(
     query: Query<UpdateWatchlistQuery>,
     db: web::Data<DBConnection>,
-    app_config: Data<AppConfig>,
 ) -> Result<HttpResponse<String>, Error> {
-    let button = match app_config.tmdb_api_key.is_empty() {
-        true => {
-            let imdb_db = IMDBDatabase::new(db.deref());
+    let button = {
+        let imdb_db = IMDBDatabase::new(db.deref());
 
-            match imdb_db
-                .update_watchlist_item(&query.imdb_id, query.state)
-                .await
-            {
-                Ok(_) => (),
-                Err(e) => return Err(ErrorInternalServerError(e)),
-            };
+        match imdb_db
+            .update_watchlist_item(&query.imdb_id, query.state)
+            .await
+        {
+            Ok(_) => (),
+            Err(e) => return Err(ErrorInternalServerError(e)),
+        };
 
-            create_watchlist_button(&query.imdb_id, query.state)
-        }
-        false => {
-            let movie_db = MovieDBDatabase::new(db.deref());
-
-            match movie_db
-                .update_watchlist_item(query.imdb_id.parse::<i32>().unwrap(), query.state)
-                .await
-            {
-                Ok(_) => (),
-                Err(e) => return Err(ErrorInternalServerError(e)),
-            };
-
-            create_watchlist_button(&query.imdb_id, query.state)
-        }
+        create_watchlist_button(&query.imdb_id, query.state)
     };
 
     Ok(HttpResponse::Ok().message_body(button).unwrap())
