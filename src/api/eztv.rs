@@ -151,6 +151,7 @@ impl TorrentSearch for EZTV {
                     Some(season),
                     Some(episode),
                     None,
+                    "EZTV".to_string()
                 )
             })
             .filter(|t| !matches!(t.quality, MediaQuality::Unknown))

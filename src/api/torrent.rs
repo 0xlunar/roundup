@@ -58,6 +58,7 @@ pub struct TorrentItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub episode: Option<i32>,
     pub seeds: Option<u32>,
+    pub source: String,
 }
 
 impl TorrentItem {
@@ -70,6 +71,7 @@ impl TorrentItem {
         season: Option<i32>,
         episode: Option<i32>,
         seeds: Option<u32>,
+        source: String,
     ) -> Self {
         Self {
             imdb_id,
@@ -80,6 +82,7 @@ impl TorrentItem {
             season,
             episode,
             seeds,
+            source
         }
     }
 }

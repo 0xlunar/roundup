@@ -293,6 +293,7 @@ impl TheRARBG {
                             season: item.season,
                             episode: item.episode,
                             seeds: Some(item.seeds),
+                            source: "TheRARBG".to_string()
                         })
                     }
                     _ => break,

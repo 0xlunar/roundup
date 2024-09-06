@@ -103,6 +103,7 @@ impl TorrentSearch for YTS {
                     None,
                     None,
                     None,
+                    "YTS".to_string()
                 );
                 results.push(item);
             }

@@ -182,14 +182,14 @@ fn create_download_modal_options(items: Vec<TorrentItem>) -> String {
                     if *episode == -1 {
                         let button = format!("\
                 <button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"season\": {}, \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}' hx-ext='json-enc' hx-swap=\"outerHTML\" hx-disabled-elt=\"closest button\" hx-confirm=\"Start download?\">\
-                    Entire Season {} - {}\
-                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), item.quality);
+                    Entire Season {} - {} [{}]\
+                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), item.quality, item.source);
                         output.push_str(&button);
                     } else {
                         let button = format!("\
                 <button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"season\": {}, \"episode\": {}, \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}' hx-ext='json-enc' hx-swap=\"outerHTML\" hx-disabled-elt=\"closest button\" hx-confirm=\"Start download?\">\
-                    Season: {} Episode: {} - {}\
-                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), episode, item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), episode, item.quality);
+                    Season: {} Episode: {} - {} [{}]\
+                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), episode, item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), episode, item.quality, item.source);
 
                         output.push_str(&button);
                     }
@@ -252,7 +252,7 @@ fn create_download_movie_modal_button(item: &TorrentItem) -> String {
 
     let btn_colour = button_colour_for_quality(&item.quality);
 
-    format!("<button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-ext='json-enc' hx-confirm=\"Start download?\" hx-swap=\"outerHTML\" hx-target=\"#download_selection\"{}>{}</button>", btn_colour, value, item.quality)
+    format!("<button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-ext='json-enc' hx-confirm=\"Start download?\" hx-swap=\"outerHTML\" hx-target=\"#download_selection\"{}>{} [{}]</button>", btn_colour, value, item.quality, item.source)
 }
 
 fn button_colour_for_quality(quality: &MediaQuality) -> &'static str {
@@ -316,6 +316,7 @@ pub async fn start_download(
             params.season,
             params.episode,
             None,
+            "unknown".to_string()
         );
 
         match torrenter.start_download(torrent_item).await {
@@ -350,6 +351,7 @@ pub async fn start_download_post(
             None,
             None,
             None,
+            "unknown".to_string()
         );
 
         match torrenter.start_download(torrent_item).await {
