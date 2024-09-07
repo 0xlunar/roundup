@@ -1,16 +1,15 @@
 use std::fmt;
 use std::fmt::Formatter;
 use std::ops::Not;
-
+use std::time::Duration;
 use anyhow::format_err;
 use async_trait::async_trait;
-use log::{error, warn};
-use qbittorrent::{Api, Error};
+use log::{debug, error, warn};
 use qbittorrent::queries::TorrentDownload;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
-
+use tokio::time::Instant;
 use crate::api::imdb::{IMDBEpisode, ItemType};
 
 #[async_trait]
@@ -111,7 +110,9 @@ impl Torrenter {
                     break;
                 }
                 Err(err) => {
-                    error!("Waiting for qBittorrent to start... err: {}", err);
+                    error!("Waiting for qBittorrent to start...");
+                    debug!("{}", err);
+                    tokio::time::sleep_until(Instant::now() + Duration::from_secs(1)).await;
                 }
             }
         }
