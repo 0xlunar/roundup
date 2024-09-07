@@ -117,7 +117,7 @@ impl TorrentSearch for EZTV {
                     .split(' ')
                     .find(|q| q.ends_with("0p"))
                     .unwrap_or("unknown");
-                
+
                 let quality = match quality {
                     "480p" => MediaQuality::_480p,
                     "720p" => MediaQuality::_720p,
@@ -127,9 +127,13 @@ impl TorrentSearch for EZTV {
                 };
                 let season = t.season.parse::<i32>().unwrap();
                 let mut episode = t.episode.parse::<i32>().unwrap();
-                
+
                 let lower_case_title = t.title.to_lowercase();
-                if episode == 0 && (lower_case_title.contains("complete") || (!lower_case_title.contains("e0") && !lower_case_title.contains("episode"))) {
+                if episode == 0
+                    && (lower_case_title.contains("complete")
+                        || (!lower_case_title.contains("e0")
+                            && !lower_case_title.contains("episode")))
+                {
                     episode = -1;
                 }
 
@@ -151,7 +155,7 @@ impl TorrentSearch for EZTV {
                     Some(season),
                     Some(episode),
                     None,
-                    "EZTV".to_string()
+                    "EZTV".to_string(),
                 )
             })
             .filter(|t| !matches!(t.quality, MediaQuality::Unknown))
@@ -202,5 +206,4 @@ struct EZTVTorrent {
     season: String,
     episode: String,
     seeds: i64,
-    size_bytes: String, // TODO: Add calculation for max torrent size
 }

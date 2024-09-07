@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use actix_web::web::Data;
 use anyhow::format_err;
-use chrono::Datelike;
 use log::{info, warn};
 use rayon::prelude::*;
 use tokio::time::Instant;

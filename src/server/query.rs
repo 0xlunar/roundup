@@ -4,18 +4,18 @@ use actix_web::{Error, get, HttpResponse, web};
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
 use actix_web::web::{Data, Query};
 use anyhow::format_err;
-use chrono::{Datelike, Duration, Local};
+use chrono::{Duration, Local};
 use log::error;
 use rayon::prelude::*;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
-use crate::{AppConfig, QueryCache};
 use crate::api::imdb::{IMDB, IMDBItem, ItemType, SearchType};
 use crate::api::youtube::Youtube;
 use crate::db::DBConnection;
 use crate::db::downloads::{ActiveDownloadIMDBItem, DownloadDatabase};
 use crate::db::imdb::IMDBDatabase;
+use crate::QueryCache;
 
 #[derive(Deserialize)]
 pub struct SearchQueryParams {

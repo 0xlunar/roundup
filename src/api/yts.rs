@@ -23,7 +23,10 @@ impl YTS {
             .build()
             .unwrap();
 
-        Box::new(Self { client, trackers: trackers.to_vec() })
+        Box::new(Self {
+            client,
+            trackers: trackers.to_vec(),
+        })
     }
 }
 
@@ -103,7 +106,7 @@ impl TorrentSearch for YTS {
                     None,
                     None,
                     None,
-                    "YTS".to_string()
+                    "YTS".to_string(),
                 );
                 results.push(item);
             }
@@ -130,7 +133,6 @@ struct Data {
 struct Movie {
     imdb_code: String,
     title: String,
-    state: String,
     torrents: Vec<Torrent>,
 }
 
@@ -138,7 +140,4 @@ struct Movie {
 struct Torrent {
     hash: String,
     quality: String,
-    seeds: i64,
-    peers: i64,
-    size: String,
 }

@@ -9,7 +9,7 @@ use actix_web::{App, HttpServer};
 use actix_web::middleware::Logger;
 use actix_web::web::Data;
 use chrono::{DateTime, Local};
-use log::{error, info, warn};
+use log::{error, info};
 use qbittorrent::Api;
 use qbittorrent::data::{Hash, State, Torrent};
 use qbittorrent::traits::TorrentData;

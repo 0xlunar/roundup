@@ -1,6 +1,6 @@
 use anyhow::format_err;
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::error;
 use rayon::prelude::*;
 use reqwest::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue};

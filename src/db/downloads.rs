@@ -4,7 +4,7 @@ use chrono::Local;
 use qbittorrent::data::Hash;
 use rayon::prelude::*;
 use serde::Serialize;
-use sqlx::{Postgres, QueryBuilder, Row};
+use sqlx::{Postgres, QueryBuilder};
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
 use crate::api::torrent::MediaQuality;
@@ -33,10 +33,6 @@ pub struct ActiveDownloadItem {
     magnet_hash: String,
     state: String,
     progress: f64,
-    #[serde(skip_serializing)]
-    pub created_at: chrono::DateTime<Local>,
-    #[serde(skip_serializing)]
-    pub updated_at: chrono::DateTime<Local>,
 }
 
 #[derive(sqlx::FromRow, Serialize)]

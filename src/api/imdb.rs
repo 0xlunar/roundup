@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 pub struct IMDB {
     search_type: SearchType,
     proxy: Option<Proxy>,
-    query_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -56,18 +55,13 @@ pub struct IMDBItem {
 
 #[derive(Debug, Clone)]
 pub struct IMDBEpisode {
-    pub id: String,
     pub season: i32,
     pub episode: i32,
 }
 
 impl<'a> IMDB {
     pub fn new(search_type: SearchType, proxy: Option<Proxy>) -> IMDB {
-        IMDB {
-            search_type,
-            proxy,
-            query_key: None,
-        }
+        IMDB { search_type, proxy }
     }
 
     pub async fn search(&self) -> anyhow::Result<Vec<IMDBItem>> {
@@ -190,13 +184,7 @@ impl<'a> IMDB {
             .episodes
             .items
             .par_iter()
-            .map(|e| {
-                IMDBEpisode::new(
-                    e.id.clone(),
-                    e.season.parse().unwrap(),
-                    e.episode.parse().unwrap(),
-                )
-            })
+            .map(|e| IMDBEpisode::new(e.season.parse().unwrap(), e.episode.parse().unwrap()))
             .collect::<Vec<IMDBEpisode>>();
 
         if season.eq(&0) && data.page_props.content_data.section.seasons.len().gt(&0) {
@@ -496,12 +484,8 @@ impl<'a> SearchType {
 }
 
 impl IMDBEpisode {
-    fn new(id: String, season: i32, episode: i32) -> Self {
-        Self {
-            id,
-            season,
-            episode,
-        }
+    fn new(season: i32, episode: i32) -> Self {
+        Self { season, episode }
     }
 }
 
@@ -521,10 +505,6 @@ impl ItemType {
 struct IMDBSuggestionQueryResponse {
     #[serde(rename = "d")]
     data: Vec<SuggestionQueryData>,
-    #[serde(rename = "q")]
-    query: String,
-    #[serde(rename = "v")]
-    version: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -535,39 +515,18 @@ struct SuggestionQueryData {
     id: String,
     #[serde(rename = "l")]
     title: String,
-    #[serde(rename = "s")]
-    actors: String,
-    #[serde(rename = "q")]
-    type_name: Option<String>,
     #[serde(rename = "qid")]
     _type: Option<String>,
-    rank: Option<i64>,
-    #[serde(rename = "v")]
-    videos: Option<Vec<SuggestionQueryVideo>>,
     #[serde(rename = "vt")]
     _vt: Option<i64>,
     #[serde(rename = "y")]
     year: Option<i64>,
-    #[serde(rename = "yr")]
-    year_range: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct SuggestionQueryImage {
     #[serde(rename = "imageUrl")]
     image_url: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct SuggestionQueryVideo {
-    #[serde(rename = "i")]
-    image: SuggestionQueryImage,
-    #[serde(rename = "id")]
-    id: String,
-    #[serde(rename = "l")]
-    title: String,
-    #[serde(rename = "s")]
-    length: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -603,7 +562,6 @@ struct ChartTitles {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Edge {
-    current_rank: i64,
     node: Node,
 }
 
@@ -615,26 +573,12 @@ struct Node {
     primary_image: PrimaryImage,
     release_year: Option<ReleaseYear>,
     certificate: Option<Certificate>,
-    can_have_episodes: bool,
-    episodes: Option<Episodes>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TitleText {
     text: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DisplayableProperty {
-    value: PlainText,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PlainText {
-    plain_text: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -647,43 +591,12 @@ struct PrimaryImage {
 #[serde(rename_all = "camelCase")]
 struct ReleaseYear {
     year: i64,
-    end_year: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Certificate {
     rating: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TitleGenres {
-    genres: Vec<Genre>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Genre {
-    genre: Genre2,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Genre2 {
-    text: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Episodes {
-    episodes: Episodes2,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Episodes2 {
-    total: i64,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -736,8 +649,8 @@ pub struct IMDBTVSeasonItem {
 // Page Data JSON
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IMDBNextDataResponse {
-    pub page_props: IMDBNextDataPageProps,
+struct IMDBNextDataResponse {
+    page_props: IMDBNextDataPageProps,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -756,7 +669,6 @@ struct IMDBNextDataAboveTheFoldData {
     release_year: ReleaseYear,
     runtime: Option<Runtime>,
     primary_image: PrimaryImage,
-    primary_videos: IMDBNextDataPrimaryVideos,
     plot: Option<IMDBNextDataPlot>,
 }
 
@@ -764,47 +676,6 @@ struct IMDBNextDataAboveTheFoldData {
 #[serde(rename_all = "camelCase")]
 struct Runtime {
     seconds: i64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IMDBNextDataPrimaryVideos {
-    edges: Vec<IMDBNextDataEdge>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IMDBNextDataEdge {
-    node: IMDBNextDataEdgeNode,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IMDBNextDataEdgeNode {
-    name: IMDBNextDataName,
-    thumbnail: IMDBNextDataThumbnail,
-    #[serde(rename = "playbackURLs")]
-    playback_urls: Vec<IMDBNextDataPlaybackUrl>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IMDBNextDataName {
-    value: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IMDBNextDataThumbnail {
-    url: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IMDBNextDataPlaybackUrl {
-    video_mime_type: String,
-    video_definition: String,
-    url: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
