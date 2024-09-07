@@ -29,7 +29,6 @@ rustls-pemfile = "2.1.2"
 log = "0.4.21"
 rayon = "1.10.0"
 console-subscriber = "0.2.0"
-plist = "1.6.1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52.0"
