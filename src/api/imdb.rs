@@ -355,7 +355,7 @@ impl<'a> IMDB {
         let resp_data: IMDBSuggestionQueryResponse = serde_json::from_str(data)?;
 
         let output = resp_data.data.par_iter().filter(|item| {
-            ItemType::from_str(item._type.as_ref().unwrap_or(&"".to_string()).as_str()).is_ok()
+            ItemType::try_from(item._type.as_ref().unwrap_or(&"".to_string()).as_str()).is_ok()
                 && item.year.is_some()
                 && item.image.is_some()
         }).map(|item| {
@@ -371,7 +371,7 @@ impl<'a> IMDB {
                 plot: None,
                 popularity_rank: None, // This is Search Query only so always None
                 release_order: None, // This is Search Query only so always None
-                _type: ItemType::from_str(item._type.as_ref().unwrap().as_str()).unwrap(),
+                _type: ItemType::try_from(item._type.as_ref().unwrap().as_str()).unwrap(),
                 watchlist: false,
                 created_at: Local::now(),
                 updated_at: Local::now(),
@@ -489,14 +489,17 @@ impl IMDBEpisode {
     }
 }
 
-impl ItemType {
-    fn from_str(input: &str) -> anyhow::Result<ItemType> {
-        if input.eq_ignore_ascii_case("movie") || input.contains("film") {
+
+impl TryFrom<&str> for ItemType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value.eq_ignore_ascii_case("movie") || value.contains("film") {
             Ok(ItemType::Movie)
-        } else if input.starts_with("tv") {
+        } else if value.starts_with("tv") {
             Ok(ItemType::TvShow)
         } else {
-            Err(format_err!("Invalid input: {}", input))
+            Err(format_err!("Invalid input: {}", value))
         }
     }
 }

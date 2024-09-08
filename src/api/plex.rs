@@ -24,7 +24,8 @@ impl Plex {
         let token = Plex::get_plex_auth_token()?;
 
         let mut headers = HeaderMap::new();
-        headers.insert("User-Agent", HeaderValue::from_static("roundup/1.0"));
+        let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+        headers.insert("User-Agent", HeaderValue::from_static(user_agent));
         headers.insert("Accept", HeaderValue::from_static("application/json"));
 
         let client = ClientBuilder::new()

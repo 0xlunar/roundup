@@ -10,8 +10,9 @@ pub struct Youtube {
 
 impl Youtube {
     pub fn new(api_key: &str) -> Self {
-        let client = ClientBuilder::new().user_agent("roundup/1.0").build().unwrap();
-
+        let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+        let client = ClientBuilder::new().user_agent(user_agent).build().unwrap();
+        
         Youtube {
             client,
             api_key: api_key.to_string()
