@@ -82,16 +82,12 @@ async fn main() -> anyhow::Result<()> {
 
     let app_config_clone = Data::clone(&app_config);
     let db = Data::clone(&db_conn);
+    let torrent_client = Arc::new(torrent_client);
+    let torrent_client_clone = Arc::clone(&torrent_client);
     let torrent_watcher = tokio::task::spawn(async move {
         let config = Data::clone(&app_config_clone);
         let delay_dur = Duration::from_millis(15000);
-        let client = Api::new(
-            &config.qbittorrent_username,
-            &config.qbittorrent_password,
-            &config.qbittorrent_url,
-        )
-        .await
-        .unwrap();
+
         let mut torrents_filtered = HashSet::new();
         let mut stalled_torrents = HashMap::new();
         let mut auto_torrents = HashSet::new();
@@ -105,8 +101,8 @@ async fn main() -> anyhow::Result<()> {
             } {
                 auto_torrents.insert(val);
             }
-            let _ = monitor_torrents(
-                &client,
+            let _ = api::torrent::monitor_torrents(
+                torrent_client_clone.clone(),
                 &config,
                 &db,
                 &mut torrents_filtered,
@@ -120,7 +116,6 @@ async fn main() -> anyhow::Result<()> {
 
     let db_conn = Data::clone(&db_conn);
     let db_conn_watchlist = Data::clone(&db_conn);
-    let torrent_client = Arc::new(torrent_client);
     let watchlist_task = tokio::task::spawn(api::watchlist::monitor_watchlist(
         db_conn_watchlist.into_inner(),
         Arc::new(plex_session.clone()),
@@ -245,131 +240,131 @@ impl AppConfig {
     }
 }
 
-async fn monitor_torrents(
-    client: &Api,
-    config: &Data<AppConfig>,
-    db: &Data<DBConnection>,
-    torrents_filtered: &mut HashSet<String>,
-    stalled_torrents: &mut HashMap<String, (State, DateTime<Local>)>,
-    auto_torrents: &mut HashSet<String>,
-) {
-    let torrents = match client.get_torrent_list().await {
-        Ok(t) => t,
-        Err(_) => {
-            return;
-        }
-    };
-
-    let db = DownloadDatabase::new(db);
-    if torrents.is_empty() {
-        let _ = db.remove_all().await;
-        return;
-    }
-
-    let hashes = torrents
-        .par_iter()
-        .map(|x| x.hash())
-        .collect::<Vec<&Hash>>();
-    let _ = db.remove_all_finished().await;
-    let _ = db.remove_manually_removed(&hashes).await;
-
-    let completed = torrents
-        .iter()
-        .filter(|t| matches!(t.state(), State::PausedUP))
-        .map(|t| {
-            let hash = t.hash().clone().inner();
-            torrents_filtered.remove(&hash);
-            stalled_torrents.remove(&hash);
-            auto_torrents.remove(t.magnet_uri());
-            t.hash()
-        })
-        .collect::<Vec<&Hash>>();
-
-    if !completed.is_empty() {
-        match client.delete_torrents(completed, false).await {
-            Ok(_) => {}
-            Err(e) => error!("Error Deleting torrents: {}", e),
-        }
-    }
-
-    // Updating Database items
-    for torrent in torrents.iter() {
-        match db
-            .update(
-                torrent.hash().as_str(),
-                torrent.state().as_ref(),
-                *torrent.progress(),
-            )
-            .await
-        {
-            Ok(_) => (),
-            Err(e) => error!("DB Error updating download: {}", e),
-        }
-    }
-
-    // TODO: Find better way of doing this
-    let filtered_clone = torrents_filtered.clone();
-    let torrents = torrents.par_iter().filter(|t| {
-        let hash = t.hash().as_str();
-        let contains = auto_torrents.contains(hash);
-        contains && filtered_clone.contains(hash).not()
-    } && matches!(t.state(), State::Downloading | State::StalledDL | State::ForceDL)).collect::<Vec<&Torrent>>();
-
-    let mut thirty_minutes_ago: DateTime<Local> = Local::now();
-    thirty_minutes_ago = thirty_minutes_ago
-        .checked_sub_signed(chrono::Duration::minutes(30))
-        .unwrap();
-
-    let mut torrents_to_reannounce = vec![];
-
-    for torrent in torrents {
-        stalled_torrents
-            .entry(torrent.hash().clone().inner())
-            .and_modify(|(state, time)| {
-                if *state != *torrent.state() {
-                    *state = torrent.state().clone();
-                    *time = Local::now();
-                } else if *state == State::StalledDL && *time <= thirty_minutes_ago {
-                    *time = Local::now();
-                    torrents_to_reannounce.push(torrent.hash());
-                }
-            })
-            .or_insert((torrent.state().clone(), Local::now()));
-
-        let contents = match client.contents(torrent).await {
-            Ok(c) => c,
-            Err(_) => {
-                continue;
-            }
-        };
-
-        let mut files_to_remove: Vec<i64> = Vec::new();
-        let valid_file_types = &config.valid_file_types;
-        for content in contents {
-            if !valid_file_types.iter().any(|t| content.name().ends_with(t)) {
-                files_to_remove.push(*content.index());
-            }
-        }
-
-        if files_to_remove.is_empty() {
-            continue;
-        }
-
-        match client
-            .set_file_priority(torrent.hash(), files_to_remove, 0)
-            .await
-        {
-            Ok(_) => {
-                torrents_filtered.insert(torrent.hash().clone().inner());
-            }
-            Err(e) => error!("Error: {}", e),
-        }
-    }
-
-    if !torrents_to_reannounce.is_empty() {
-        match client.reannounce_torrents(torrents_to_reannounce).await {
-            Ok(_) => info!("Reannounced some torrents"),
-            Err(e) => error!("Failed to reannounce torrents: {}", e),
-        }
-    }
-}
+// async fn monitor_torrents(
+//     client: &Api,
+//     config: &Data<AppConfig>,
+//     db: &Data<DBConnection>,
+//     torrents_filtered: &mut HashSet<String>,
+//     stalled_torrents: &mut HashMap<String, (State, DateTime<Local>)>,
+//     auto_torrents: &mut HashSet<String>,
+// ) {
+//     let torrents = match client.get_torrent_list().await {
+//         Ok(t) => t,
+//         Err(_) => {
+//             return;
+//         }
+//     };
+// 
+//     let db = DownloadDatabase::new(db);
+//     if torrents.is_empty() {
+//         let _ = db.remove_all().await;
+//         return;
+//     }
+// 
+//     let hashes = torrents
+//         .par_iter()
+//         .map(|x| x.hash())
+//         .collect::<Vec<&Hash>>();
+//     let _ = db.remove_all_finished().await;
+//     // let _ = db.remove_manually_removed(&hashes).await;
+// 
+//     let completed = torrents
+//         .iter()
+//         .filter(|t| matches!(t.state(), State::PausedUP))
+//         .map(|t| {
+//             let hash = t.hash().clone().inner();
+//             torrents_filtered.remove(&hash);
+//             stalled_torrents.remove(&hash);
+//             auto_torrents.remove(t.magnet_uri());
+//             t.hash()
+//         })
+//         .collect::<Vec<&Hash>>();
+// 
+//     if !completed.is_empty() {
+//         match client.delete_torrents(completed, false).await {
+//             Ok(_) => {}
+//             Err(e) => error!("Error Deleting torrents: {}", e),
+//         }
+//     }
+// 
+//     // Updating Database items
+//     for torrent in torrents.iter() {
+//         match db
+//             .update(
+//                 torrent.hash().as_str(),
+//                 torrent.state().as_ref(),
+//                 *torrent.progress(),
+//             )
+//             .await
+//         {
+//             Ok(_) => (),
+//             Err(e) => error!("DB Error updating download: {}", e),
+//         }
+//     }
+// 
+//     // TODO: Find better way of doing this
+//     let filtered_clone = torrents_filtered.clone();
+//     let torrents = torrents.par_iter().filter(|t| {
+//         let hash = t.hash().as_str();
+//         let contains = auto_torrents.contains(hash);
+//         contains && filtered_clone.contains(hash).not()
+//     } && matches!(t.state(), State::Downloading | State::StalledDL | State::ForceDL)).collect::<Vec<&Torrent>>();
+// 
+//     let mut thirty_minutes_ago: DateTime<Local> = Local::now();
+//     thirty_minutes_ago = thirty_minutes_ago
+//         .checked_sub_signed(chrono::Duration::minutes(30))
+//         .unwrap();
+// 
+//     let mut torrents_to_reannounce = vec![];
+// 
+//     for torrent in torrents {
+//         stalled_torrents
+//             .entry(torrent.hash().clone().inner())
+//             .and_modify(|(state, time)| {
+//                 if *state != *torrent.state() {
+//                     *state = torrent.state().clone();
+//                     *time = Local::now();
+//                 } else if *state == State::StalledDL && *time <= thirty_minutes_ago {
+//                     *time = Local::now();
+//                     torrents_to_reannounce.push(torrent.hash());
+//                 }
+//             })
+//             .or_insert((torrent.state().clone(), Local::now()));
+// 
+//         let contents = match client.contents(torrent).await {
+//             Ok(c) => c,
+//             Err(_) => {
+//                 continue;
+//             }
+//         };
+// 
+//         let mut files_to_remove: Vec<i64> = Vec::new();
+//         let valid_file_types = &config.valid_file_types;
+//         for content in contents {
+//             if !valid_file_types.iter().any(|t| content.name().ends_with(t)) {
+//                 files_to_remove.push(*content.index());
+//             }
+//         }
+// 
+//         if files_to_remove.is_empty() {
+//             continue;
+//         }
+// 
+//         match client
+//             .set_file_priority(torrent.hash(), files_to_remove, 0)
+//             .await
+//         {
+//             Ok(_) => {
+//                 torrents_filtered.insert(torrent.hash().clone().inner());
+//             }
+//             Err(e) => error!("Error: {}", e),
+//         }
+//     }
+// 
+//     if !torrents_to_reannounce.is_empty() {
+//         match client.reannounce_torrents(torrents_to_reannounce).await {
+//             Ok(_) => info!("Reannounced some torrents"),
+//             Err(e) => error!("Failed to reannounce torrents: {}", e),
+//         }
+//     }
+// }

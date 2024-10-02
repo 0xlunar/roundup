@@ -1,7 +1,6 @@
 use std::ops::Not;
 
 use chrono::Local;
-use qbittorrent::data::Hash;
 use rayon::prelude::*;
 use serde::Serialize;
 use sqlx::{Postgres, QueryBuilder};
@@ -234,7 +233,7 @@ impl<'a> DownloadDatabase<'a> {
 
     pub async fn remove_manually_removed(
         &self,
-        active_hashes: &[&Hash],
+        active_hashes: &[&String],
     ) -> Result<(), sqlx::Error> {
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(String::from(
             "DELETE FROM active_downloads WHERE magnet_hash NOT IN (",

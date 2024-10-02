@@ -1,16 +1,30 @@
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::Formatter;
 use std::ops::Not;
+use std::sync::Arc;
 use std::time::Duration;
+
+use actix_web::web::Data;
 use anyhow::format_err;
 use async_trait::async_trait;
-use log::{debug, error, warn};
+use chrono::{DateTime, Local};
+use log::{debug, error, info, warn};
+use qbittorrent::Api;
+// use qbittorrent::data::{Hash, Torrent};
 use qbittorrent::queries::TorrentDownload;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::Instant;
+
 use crate::api::imdb::{IMDBEpisode, ItemType};
+use crate::api::torrent_client::{Torrent, TorrentClient, TorrentFilePriority, TorrentState};
+use crate::AppConfig;
+use crate::db::DBConnection;
+use crate::db::downloads::DownloadDatabase;
+
+use super::torrent_client;
 
 #[async_trait]
 pub trait TorrentSearch: Send {
@@ -81,19 +95,21 @@ impl TorrentItem {
             season,
             episode,
             seeds,
-            source
+            source,
         }
     }
 }
 
 pub struct Torrenter {
-    client: qbittorrent::Api,
+    pub client: Box<dyn TorrentClient>,
     mpsc: UnboundedSender<String>,
     min_quality: MediaQuality,
     trackers: Vec<String>,
 }
 impl Torrenter {
-    // Blocks until successful
+    /**
+    Waits until a connection is established.
+     */
     pub async fn new(
         username: &str,
         password: &str,
@@ -102,20 +118,38 @@ impl Torrenter {
         mpsc_sender: UnboundedSender<String>,
         trackers: Vec<String>,
     ) -> Self {
+        let username = if username.is_empty() {
+            None
+        } else {
+            Some(username)
+        };
+
+        let password = if password.is_empty() {
+            None
+        } else {
+            Some(password)
+        };
+
         let mut client = None;
         while client.is_none() {
-            match qbittorrent::Api::new(username, password, address).await {
-                Ok(c) => {
-                    client = Some(c);
-                    break;
-                }
-                Err(err) => {
-                    error!("Waiting for qBittorrent to start...");
-                    debug!("{}", err);
-                    tokio::time::sleep_until(Instant::now() + Duration::from_secs(1)).await;
+            let available_clients: Vec<Box<dyn TorrentClient>> = vec![
+                Box::new(torrent_client::qbittorrent::QbittorrentWrapper::new()),
+                Box::new(torrent_client::transmission::TransmissionWrapper::new()),
+            ];
+            for mut a_client in available_clients {
+                match a_client.initialise(address, username, password).await {
+                    Ok(_) => {
+                        client = Some(a_client);
+                        break;
+                    }
+                    Err(err) => {
+                        warn!("Waiting for torrent client to start...");
+                        debug!("{}", err);
+                    }
                 }
             }
         }
+
         let client = client.unwrap();
 
         Self {
@@ -140,9 +174,6 @@ impl Torrenter {
         ];
 
         if concurrent_search {
-            let search_term = search_term.clone();
-            let imdb_id = imdb_id.clone();
-            let tv_episodes = tv_episodes.clone();
             let tasks = ordering
                 .into_iter()
                 .map(|site| {
@@ -155,10 +186,11 @@ impl Torrenter {
                     site.search(search_term, imdb_id, tv_episodes).await
                 })
                 .collect::<Vec<_>>();
-            
+
             let results = futures::future::join_all(tasks).await;
-            let output = results.into_par_iter().filter_map(|task|
-                match task {
+            let output = results
+                .into_par_iter()
+                .filter_map(|task| match task {
                     Ok(r) => {
                         if r.is_empty() {
                             None
@@ -178,7 +210,9 @@ impl Torrenter {
                         warn!("{}", e);
                         None
                     }
-            }).flatten().collect::<Vec<_>>();
+                })
+                .flatten()
+                .collect::<Vec<_>>();
             if output.is_empty().not() {
                 return Ok(output);
             }
@@ -225,8 +259,8 @@ impl Torrenter {
             .to_lowercase();
         self.mpsc.send(hash)?;
 
-        let torrent = TorrentDownload::new(Some(item.magnet_uri), None);
-        self.client.add_new_torrent(&torrent).await?;
+        // let torrent = TorrentDownload::new(Some(item.magnet_uri), None);
+        self.client.add_torrent(&item.magnet_uri).await?;
         Ok(())
     }
 }
@@ -243,6 +277,137 @@ impl fmt::Display for MediaQuality {
             MediaQuality::_480p => write!(f, "480p"),
             MediaQuality::_2160p => write!(f, "2160p"),
             MediaQuality::_4320p => write!(f, "4320p"),
+        }
+    }
+}
+
+pub async fn monitor_torrents(
+    client: Arc<Torrenter>,
+    config: &Data<AppConfig>,
+    db: &Data<DBConnection>,
+    torrents_filtered: &mut HashSet<String>,
+    stalled_torrents: &mut HashMap<String, (TorrentState, DateTime<Local>)>,
+    auto_torrents: &mut HashSet<String>,
+) {
+    let client = &client.client;
+    let torrents = match client.get_torrents().await {
+        Ok(t) => t,
+        Err(_) => {
+            return;
+        }
+    };
+
+    let db = DownloadDatabase::new(db);
+    if torrents.is_empty() {
+        let _ = db.remove_all().await;
+        return;
+    }
+
+    let hashes = torrents.par_iter().map(|x| &x.hash).collect::<Vec<_>>();
+    let _ = db.remove_all_finished().await;
+    let _ = db.remove_manually_removed(&hashes).await;
+
+    let completed = torrents
+        .iter()
+        .filter(|t| matches!(t.state, TorrentState::Completed))
+        .map(|t| {
+            let hash = &t.hash;
+            torrents_filtered.remove(hash);
+            stalled_torrents.remove(hash);
+            auto_torrents.remove(hash);
+            hash.as_str()
+        })
+        .collect::<Vec<_>>();
+
+    if !completed.is_empty() {
+        match client.remove_torrents(completed).await {
+            Ok(_) => {}
+            Err(e) => error!("Error Deleting torrents: {}", e),
+        }
+    }
+
+    // Updating Database items
+    for torrent in torrents.iter() {
+        let state = torrent.state.to_string();
+        match db
+            .update(&torrent.hash, state.as_str(), torrent.progress)
+            .await
+        {
+            Ok(_) => (),
+            Err(e) => error!("DB Error updating download: {}", e),
+        }
+    }
+
+    // TODO: Find better way of doing this
+    let filtered_clone = torrents_filtered.clone();
+    let torrents = torrents.par_iter().filter(|t| {
+        let hash = t.hash.as_str();
+        let contains = auto_torrents.contains(hash);
+        contains && filtered_clone.contains(hash).not()
+    } && matches!(t.state, TorrentState::Downloading | TorrentState::Stalled)).collect::<Vec<_>>();
+
+    let mut thirty_minutes_ago: DateTime<Local> = Local::now();
+    thirty_minutes_ago = thirty_minutes_ago
+        .checked_sub_signed(chrono::Duration::minutes(30))
+        .unwrap();
+
+    let mut torrents_to_reannounce = vec![];
+
+    for torrent in torrents {
+        stalled_torrents
+            .entry(torrent.hash.clone())
+            .and_modify(|(state, time)| {
+                if *state != torrent.state {
+                    *state = torrent.state.clone();
+                    *time = Local::now();
+                } else if *state == TorrentState::Stalled && *time <= thirty_minutes_ago {
+                    *time = Local::now();
+                    torrents_to_reannounce.push(torrent.hash.as_str());
+                }
+            })
+            .or_insert((torrent.state.clone(), Local::now()));
+
+        let contents = match &torrent.files {
+            Some(files) => files,
+            None => {
+                continue;
+            }
+        };
+
+        let mut files_to_remove: Vec<i64> = Vec::new();
+        let valid_file_types = &config.valid_file_types;
+        for content in contents {
+            if !valid_file_types
+                .iter()
+                .any(|t| content.file_name.ends_with(t))
+            {
+                files_to_remove.push(content.id);
+            }
+        }
+
+        if files_to_remove.is_empty() {
+            continue;
+        }
+
+        match client
+            .set_file_priority(
+                &torrent.hash,
+                files_to_remove,
+                TorrentFilePriority::DisallowDownload,
+            )
+            .await
+        {
+            Ok(_) => {
+                torrents_filtered.insert(torrent.hash.clone());
+            }
+            Err(e) => error!("Error: {}", e),
+        }
+    }
+
+    if !torrents_to_reannounce.is_empty() {
+        match client.reannounce_torrents(torrents_to_reannounce).await {
+            Ok(_) => info!("Reannounced some torrents"),
+            Err(e) => error!("Failed to reannounce torrents: {}", e),
         }
     }
 }

@@ -46,12 +46,8 @@ pub async fn find_download(
     let concurrent_search = app_config.concurrent_torrent_search;
     let missing_tv_episodes = match params._type.as_str() {
         "tv" => {
-            match find_missing_tv_shows(
-                plex.clone().into_inner(),
-                &params.imdb_id,
-                &params.title,
-            )
-            .await
+            match find_missing_tv_shows(plex.clone().into_inner(), &params.imdb_id, &params.title)
+                .await
             {
                 Ok(t) => t,
                 Err(e) => return Err(ErrorInternalServerError(e)),
@@ -66,7 +62,6 @@ pub async fn find_download(
             Err(e) => return Err(ErrorInternalServerError(e)),
         };
 
-    // TODO: Add check to prevent downloading active downloads
     let download_db = DownloadDatabase::new(db.deref());
 
     let imdb_id = match params.imdb_id.starts_with("tt") {
@@ -316,7 +311,7 @@ pub async fn start_download(
             params.season,
             params.episode,
             None,
-            "unknown".to_string()
+            "unknown".to_string(),
         );
 
         match torrenter.start_download(torrent_item).await {
@@ -351,7 +346,7 @@ pub async fn start_download_post(
             None,
             None,
             None,
-            "unknown".to_string()
+            "unknown".to_string(),
         );
 
         match torrenter.start_download(torrent_item).await {

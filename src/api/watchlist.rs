@@ -92,7 +92,14 @@ async fn check_movie_downloads_imdb(
     db: Arc<DBConnection>,
     config: Data<AppConfig>,
 ) -> anyhow::Result<()> {
-    find_downloads_and_start_imdb(item, None, torrenter, db.clone(), config.concurrent_torrent_search).await?;
+    find_downloads_and_start_imdb(
+        item,
+        None,
+        torrenter,
+        db.clone(),
+        config.concurrent_torrent_search,
+    )
+    .await?;
 
     // Remove from watchlist as no further movies will release under this ID
     let imdb_db = IMDBDatabase::new(db.deref());
@@ -110,8 +117,7 @@ async fn check_tv_downloads_imdb(
     let title = format!("{} ({})", &item.title, item.year);
 
     let concurrent_search = app_config.concurrent_torrent_search;
-    let missing_episodes =
-        download::find_missing_tv_shows(plex, &item.id, &title).await?;
+    let missing_episodes = download::find_missing_tv_shows(plex, &item.id, &title).await?;
     if missing_episodes.is_none() {
         return Err(format_err!("No missing episodes"));
     }
