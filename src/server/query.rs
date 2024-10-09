@@ -282,7 +282,7 @@ pub async fn modal_metadata(
         }
 
         if cached_item.plot.is_none() {
-            let metadata = match IMDB::update_media_data(&params.id, None, None).await {
+            let metadata = match IMDB::update_media_data(&params.id, None).await {
                 Ok(t) => t,
                 Err(e) => return Err(ErrorInternalServerError(e)),
             };

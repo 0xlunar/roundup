@@ -264,17 +264,7 @@ impl<'a> IMDB {
 
         Ok(token)
     }
-    pub async fn update_media_data(
-        id: &str,
-        query_key: Option<String>,
-        proxy: Option<Proxy>,
-    ) -> anyhow::Result<IMDBItem> {
-        // let mut query_key = query_key;
-        // if query_key.is_none() {
-        //     let token = IMDB::update_query_key(proxy.clone()).await?;
-        //     query_key = Some(token);
-        // }
-
+    pub async fn update_media_data(id: &str, proxy: Option<Proxy>) -> anyhow::Result<IMDBItem> {
         let mut headers = HeaderMap::new();
         headers.insert("Accept", HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"));
         headers.insert(
@@ -316,12 +306,6 @@ impl<'a> IMDB {
         };
         let client = client.build()?;
 
-        // let url = format!(
-        //     "https://www.imdb.com/_next/data/{}/title/{}.json",
-        //     query_key.unwrap(),
-        //     id
-        // );
-
         let url = format!("https://www.imdb.com/title/{}/?ref_=ls_t_2", id);
 
         let resp = client.get(url).send().await?;
@@ -332,7 +316,6 @@ impl<'a> IMDB {
         }
 
         let text = resp.text().await?;
-        // let data: IMDBNextDataResponse = serde_json::from_str(&text)?;
         let data = Self::scrape_html_for_data(&text)?;
 
         let data = data.page_props.above_the_fold_data;
