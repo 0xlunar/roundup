@@ -269,15 +269,14 @@ impl<'a> IMDB {
         query_key: Option<String>,
         proxy: Option<Proxy>,
     ) -> anyhow::Result<IMDBItem> {
-        let mut query_key = query_key;
-        if query_key.is_none() {
-            let token = IMDB::update_query_key(proxy.clone()).await?;
-            query_key = Some(token);
-        }
+        // let mut query_key = query_key;
+        // if query_key.is_none() {
+        //     let token = IMDB::update_query_key(proxy.clone()).await?;
+        //     query_key = Some(token);
+        // }
 
         let mut headers = HeaderMap::new();
-        headers.insert("Accept", HeaderValue::from_static("application/json"));
-        headers.insert("DNT", HeaderValue::from_static("1"));
+        headers.insert("Accept", HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"));
         headers.insert(
             "Referer",
             HeaderValue::from_static("https://www.imdb.com/chart/moviemeter/"),
@@ -287,20 +286,43 @@ impl<'a> IMDB {
             HeaderValue::from_static("en-US,en;q=0.9,en-AU;q=0.8"),
         );
         headers.insert("Cache-Control", HeaderValue::from_static("no-cache"));
-        headers.insert("User-Agent", HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"));
+        headers.insert("pragma", HeaderValue::from_static("no-cache"));
+        headers.insert("priority", HeaderValue::from_static("u=0, i"));
+        headers.insert(
+            "sec-ch-ua",
+            HeaderValue::from_static(
+                "\"Google Chrome\";v=\"129\", \"Not=A?Brand\";v=\"8\", \"Chromium\";v=\"129\"",
+            ),
+        );
+        headers.insert("sec-ch-ua-mobile", HeaderValue::from_static("?0"));
+        headers.insert(
+            "sec-ch-ua-platform",
+            HeaderValue::from_static("\"Windows\""),
+        );
+        headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
+        headers.insert("sec-fetch-mode", HeaderValue::from_static("navigate"));
+        headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
+        headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
+        headers.insert("sec-gpc", HeaderValue::from_static("1"));
+        headers.insert("upgrade-insecure-requests", HeaderValue::from_static("1"));
+        headers.insert("User-Agent", HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"));
 
-        let mut client = reqwest::ClientBuilder::new().default_headers(headers);
+        let mut client = reqwest::ClientBuilder::new()
+            .use_rustls_tls()
+            .default_headers(headers);
         client = match proxy {
             Some(p) => client.proxy(p.clone()),
             None => client,
         };
         let client = client.build()?;
 
-        let url = format!(
-            "https://www.imdb.com/_next/data/{}/title/{}.json",
-            query_key.unwrap(),
-            id
-        );
+        // let url = format!(
+        //     "https://www.imdb.com/_next/data/{}/title/{}.json",
+        //     query_key.unwrap(),
+        //     id
+        // );
+
+        let url = format!("https://www.imdb.com/title/{}/?ref_=ls_t_2", id);
 
         let resp = client.get(url).send().await?;
 
@@ -310,7 +332,8 @@ impl<'a> IMDB {
         }
 
         let text = resp.text().await?;
-        let data: IMDBNextDataResponse = serde_json::from_str(&text)?;
+        // let data: IMDBNextDataResponse = serde_json::from_str(&text)?;
+        let data = Self::scrape_html_for_data(&text)?;
 
         let data = data.page_props.above_the_fold_data;
 
@@ -351,6 +374,22 @@ impl<'a> IMDB {
 
         Ok(imdb_item)
     }
+    fn scrape_html_for_data(html: &str) -> anyhow::Result<IMDBNextDataResponse> {
+        let html = Html::parse_document(html);
+        let next_data = Selector::parse("#__NEXT_DATA__").unwrap();
+
+        match html.select(&next_data).next() {
+            Some(data_element) => match data_element.text().next() {
+                Some(text) => {
+                    let data: IMDBNextDataResponseProps = serde_json::from_str(text)?;
+                    Ok(data.props)
+                }
+                None => Err(format_err!("Missing data")),
+            },
+            None => Err(format_err!("Failed to find IMDb metadata")),
+        }
+    }
+
     fn parse_json(&self, data: &str) -> anyhow::Result<Vec<IMDBItem>> {
         let resp_data: IMDBSuggestionQueryResponse = serde_json::from_str(data)?;
 
@@ -488,7 +527,6 @@ impl IMDBEpisode {
         Self { season, episode }
     }
 }
-
 
 impl TryFrom<&str> for ItemType {
     type Error = anyhow::Error;
@@ -650,6 +688,12 @@ pub struct IMDBTVSeasonItem {
 
 ///////////
 // Page Data JSON
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IMDBNextDataResponseProps {
+    props: IMDBNextDataResponse,
+}
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct IMDBNextDataResponse {
