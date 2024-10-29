@@ -1,16 +1,16 @@
-use std::fmt;
-use std::fmt::Formatter;
-use std::ops::Not;
-use std::time::Duration;
+use crate::api::imdb::{IMDBEpisode, ItemType};
 use anyhow::format_err;
 use async_trait::async_trait;
 use log::{debug, error, warn};
 use qbittorrent::queries::TorrentDownload;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fmt::Formatter;
+use std::ops::Not;
+use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::Instant;
-use crate::api::imdb::{IMDBEpisode, ItemType};
 
 #[async_trait]
 pub trait TorrentSearch: Send {
@@ -81,7 +81,7 @@ impl TorrentItem {
             season,
             episode,
             seeds,
-            source
+            source,
         }
     }
 }
@@ -155,10 +155,11 @@ impl Torrenter {
                     site.search(search_term, imdb_id, tv_episodes).await
                 })
                 .collect::<Vec<_>>();
-            
+
             let results = futures::future::join_all(tasks).await;
-            let output = results.into_par_iter().filter_map(|task|
-                match task {
+            let output = results
+                .into_par_iter()
+                .filter_map(|task| match task {
                     Ok(r) => {
                         if r.is_empty() {
                             None
@@ -178,7 +179,9 @@ impl Torrenter {
                         warn!("{}", e);
                         None
                     }
-            }).flatten().collect::<Vec<_>>();
+                })
+                .flatten()
+                .collect::<Vec<_>>();
             if output.is_empty().not() {
                 return Ok(output);
             }

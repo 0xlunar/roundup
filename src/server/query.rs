@@ -1,8 +1,8 @@
 use std::ops::{Deref, Div, Not};
 
-use actix_web::{Error, get, HttpResponse, web};
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
 use actix_web::web::{Data, Query};
+use actix_web::{get, web, Error, HttpResponse};
 use anyhow::format_err;
 use chrono::{Duration, Local};
 use log::error;
@@ -10,11 +10,11 @@ use rayon::prelude::*;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
-use crate::api::imdb::{IMDB, IMDBItem, ItemType, SearchType};
+use crate::api::imdb::{IMDBItem, ItemType, SearchType, IMDB};
 use crate::api::youtube::Youtube;
-use crate::db::DBConnection;
 use crate::db::downloads::{ActiveDownloadIMDBItem, DownloadDatabase};
 use crate::db::imdb::IMDBDatabase;
+use crate::db::DBConnection;
 use crate::QueryCache;
 
 #[derive(Deserialize)]

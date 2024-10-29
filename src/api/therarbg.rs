@@ -2,8 +2,8 @@ use anyhow::format_err;
 use async_trait::async_trait;
 use log::error;
 use rayon::prelude::*;
-use reqwest::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::{Client, ClientBuilder};
 use scraper::{Html, Selector};
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
@@ -101,8 +101,11 @@ impl TheRARBG {
                 },
                 None => continue,
             };
-            
-            let negative_keywords = ["hdcam", "hdts", "ts", "cam", "camrip", "telesync", "tsx", "tc", "telecine", "broski"]; // I don't care for cams/telesyncs, update these if you like them.
+
+            let negative_keywords = [
+                "hdcam", "hdts", "ts", "cam", "camrip", "telesync", "tsx", "tc", "telecine",
+                "broski",
+            ]; // I don't care for cams/telesyncs, update these if you like them.
 
             let split_name = name
                 .split(' ')
@@ -135,7 +138,7 @@ impl TheRARBG {
                     let name_lowercase = name.to_lowercase();
                     let (season, episode) = match split_name
                         .par_iter()
-                        .find_first(|x| 
+                        .find_first(|x|
                             (x.starts_with('S') && x.contains('E')) || // Individual Episodes
                             ((x.as_str().eq("Season") || x.as_str().eq("season")) && !name_lowercase.contains("episode"))) // Season packs
                     {
@@ -154,7 +157,6 @@ impl TheRARBG {
                                         }
                                     }
                                 }
-                                
                                 if season_number.is_none() {
                                     continue;
                                 }
@@ -202,7 +204,7 @@ impl TheRARBG {
                 },
                 None => continue,
             };
-            
+
             let data = TheRARBGItem {
                 url,
                 media_quality: quality,
@@ -230,11 +232,7 @@ impl TheRARBG {
         }
 
         let text = resp.text().await?;
-        let output = self.parse_torrent_page(
-            imdb_id,
-            text,
-            &item
-        )?;
+        let output = self.parse_torrent_page(imdb_id, text, &item)?;
 
         Ok(output)
     }
@@ -243,7 +241,7 @@ impl TheRARBG {
         &self,
         imdb_id: String,
         html: String,
-        item: &TheRARBGItem
+        item: &TheRARBGItem,
     ) -> anyhow::Result<TorrentItem> {
         let html = Html::parse_document(&html);
 
@@ -294,7 +292,7 @@ impl TheRARBG {
                             season: item.season,
                             episode: item.episode,
                             seeds: Some(item.seeds),
-                            source: "TheRARBG".to_string()
+                            source: "TheRARBG".to_string(),
                         })
                     }
                     _ => break,
@@ -352,15 +350,19 @@ impl TorrentSearch for TheRARBG {
                 Err(e) => error!("Error fetching torrent data: {}", e),
             }
         }
-        
+
         match tv_episodes {
             Some(tv_episodes) => {
-                let episodes = tv_episodes.iter().map(|ep| (ep.season, ep.episode)).collect::<Vec<(i32,i32)>>();
-                torrents.retain(|x| x.season.is_some() && x.episode.is_some() 
-                    && (episodes.contains(&(x.season.unwrap(), x.episode.unwrap())) 
-                        || episodes.contains(&(x.season.unwrap(), -1))
-                    )
-                );
+                let episodes = tv_episodes
+                    .iter()
+                    .map(|ep| (ep.season, ep.episode))
+                    .collect::<Vec<(i32, i32)>>();
+                torrents.retain(|x| {
+                    x.season.is_some()
+                        && x.episode.is_some()
+                        && (episodes.contains(&(x.season.unwrap(), x.episode.unwrap()))
+                            || episodes.contains(&(x.season.unwrap(), -1)))
+                });
                 torrents.sort_by(|a, b| {
                     let a_s = a.season.as_ref().unwrap();
                     let b_s = b.season.as_ref().unwrap();
@@ -395,7 +397,7 @@ impl TorrentSearch for TheRARBG {
                         false
                     }
                 });
-            },
+            }
             None => {
                 torrents.sort_by(|a, b| {
                     let qual_ordering = b.quality.cmp(&a.quality);
@@ -412,7 +414,7 @@ impl TorrentSearch for TheRARBG {
                 torrents.dedup_by(|a, b| {
                     a.quality == b.quality && a.seeds.as_ref().unwrap() < b.seeds.as_ref().unwrap()
                 });
-            },
+            }
         }
         Ok(torrents)
     }

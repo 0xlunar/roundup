@@ -3,8 +3,8 @@ use std::ops::Not;
 use anyhow::format_err;
 use rayon::prelude::*;
 use regex::Regex;
-use reqwest::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::{Client, ClientBuilder};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]

@@ -1,19 +1,19 @@
 use std::ops::{Deref, Not};
 use std::sync::Arc;
 
-use actix_web::{Error, get, HttpResponse, post, web};
 use actix_web::error::ErrorInternalServerError;
 use actix_web::web::{Data, Json, Query};
+use actix_web::{get, post, web, Error, HttpResponse};
 use rayon::prelude::*;
 use serde::Deserialize;
 
-use crate::api::imdb::{IMDB, IMDBEpisode, ItemType};
+use crate::api::imdb::{IMDBEpisode, ItemType, IMDB};
 use crate::api::plex::Plex;
-use crate::api::torrent::{MediaQuality, Torrenter, TorrentItem};
-use crate::AppConfig;
-use crate::db::DBConnection;
+use crate::api::torrent::{MediaQuality, TorrentItem, Torrenter};
 use crate::db::downloads::DownloadDatabase;
 use crate::db::imdb::IMDBDatabase;
+use crate::db::DBConnection;
+use crate::AppConfig;
 
 #[derive(Deserialize)]
 pub struct DownloadQueryParams {
@@ -46,12 +46,8 @@ pub async fn find_download(
     let concurrent_search = app_config.concurrent_torrent_search;
     let missing_tv_episodes = match params._type.as_str() {
         "tv" => {
-            match find_missing_tv_shows(
-                plex.clone().into_inner(),
-                &params.imdb_id,
-                &params.title,
-            )
-            .await
+            match find_missing_tv_shows(plex.clone().into_inner(), &params.imdb_id, &params.title)
+                .await
             {
                 Ok(t) => t,
                 Err(e) => return Err(ErrorInternalServerError(e)),
@@ -316,7 +312,7 @@ pub async fn start_download(
             params.season,
             params.episode,
             None,
-            "unknown".to_string()
+            "unknown".to_string(),
         );
 
         match torrenter.start_download(torrent_item).await {
@@ -351,7 +347,7 @@ pub async fn start_download_post(
             None,
             None,
             None,
-            "unknown".to_string()
+            "unknown".to_string(),
         );
 
         match torrenter.start_download(torrent_item).await {

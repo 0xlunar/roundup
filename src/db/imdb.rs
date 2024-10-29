@@ -1,18 +1,16 @@
-use std::ops::Not;
+use super::DBConnection;
+use crate::api::imdb::{IMDBItem, SearchType};
 use anyhow::format_err;
 use sqlx::{Postgres, QueryBuilder};
-use crate::api::imdb::{IMDBItem, SearchType};
-use super::DBConnection;
+use std::ops::Not;
 
 pub struct IMDBDatabase<'a> {
-    db: &'a DBConnection
+    db: &'a DBConnection,
 }
 
 impl<'a> IMDBDatabase<'a> {
     pub fn new(db: &'a DBConnection) -> IMDBDatabase {
-        IMDBDatabase {
-            db
-        }
+        IMDBDatabase { db }
     }
 
     pub async fn insert_or_update(&self, item: &IMDBItem) -> Result<(), sqlx::Error> {
@@ -35,8 +33,12 @@ impl<'a> IMDBDatabase<'a> {
         Ok(())
     }
 
-    pub async fn fetch(&self, search_type: SearchType) -> anyhow::Result<Vec<IMDBItem>, sqlx::Error> {
-        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(String::from("SELECT * FROM imdb WHERE "));
+    pub async fn fetch(
+        &self,
+        search_type: SearchType,
+    ) -> anyhow::Result<Vec<IMDBItem>, sqlx::Error> {
+        let mut query_builder: QueryBuilder<Postgres> =
+            QueryBuilder::new(String::from("SELECT * FROM imdb WHERE "));
 
         match search_type {
             SearchType::Query(s) => {
@@ -45,21 +47,29 @@ impl<'a> IMDBDatabase<'a> {
                 query_builder.push("*'");
             }
             SearchType::MoviePopular => {
-                query_builder.push("_type = 'movie' AND popularity_rank IS NOT NULL ORDER BY popularity_rank ASC");
+                query_builder.push(
+                    "_type = 'movie' AND popularity_rank IS NOT NULL ORDER BY popularity_rank ASC",
+                );
             }
             SearchType::MovieLatestRelease => {
-                query_builder.push("_type = 'movie' AND release_order IS NOT NULL ORDER BY release_order ASC");
+                query_builder.push(
+                    "_type = 'movie' AND release_order IS NOT NULL ORDER BY release_order ASC",
+                );
             }
             SearchType::TVPopular => {
-                query_builder.push("_type = 'tvshow' AND popularity_rank IS NOT NULL ORDER BY popularity_rank ASC");
+                query_builder.push(
+                    "_type = 'tvshow' AND popularity_rank IS NOT NULL ORDER BY popularity_rank ASC",
+                );
             }
             SearchType::TVLatestRelease => {
-                query_builder.push("_type = 'tvshow' AND release_order IS NOT NULL ORDER BY release_order ASC");
+                query_builder.push(
+                    "_type = 'tvshow' AND release_order IS NOT NULL ORDER BY release_order ASC",
+                );
             }
             SearchType::Watchlist => {
                 query_builder.push("watchlist = true");
-            },
-            SearchType::Downloads => unreachable!()
+            }
+            SearchType::Downloads => unreachable!(),
         };
 
         let resp = query_builder
@@ -69,7 +79,7 @@ impl<'a> IMDBDatabase<'a> {
 
         Ok(resp)
     }
-    
+
     pub async fn fetch_item_by_id(&self, id: &str) -> anyhow::Result<Vec<IMDBItem>, sqlx::Error> {
         let query = "SELECT * FROM imdb WHERE id = $1";
 
@@ -91,24 +101,27 @@ impl<'a> IMDBDatabase<'a> {
         Ok(resp)
     }
 
-    pub async fn update_watchlist_item(&self, id: &str, state: bool) -> anyhow::Result<(), sqlx::Error> {
-        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(String::from("UPDATE imdb SET watchlist = "));
+    pub async fn update_watchlist_item(
+        &self,
+        id: &str,
+        state: bool,
+    ) -> anyhow::Result<(), sqlx::Error> {
+        let mut query_builder: QueryBuilder<Postgres> =
+            QueryBuilder::new(String::from("UPDATE imdb SET watchlist = "));
         query_builder.push_bind(state);
         query_builder.push(" WHERE id = ");
         query_builder.push_bind(id);
 
-        let built = query_builder
-            .build();
+        let built = query_builder.build();
 
-        let _ = built
-            .execute(&self.db.db)
-            .await?;
+        let _ = built.execute(&self.db.db).await?;
 
         Ok(())
     }
 
     pub async fn update_metadata(&self, item: &IMDBItem) -> anyhow::Result<()> {
-        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(String::from("UPDATE imdb SET "));
+        let mut query_builder: QueryBuilder<Postgres> =
+            QueryBuilder::new(String::from("UPDATE imdb SET "));
         let mut is_empty_query = true;
 
         match item.rating.as_str() {
@@ -118,7 +131,7 @@ impl<'a> IMDBDatabase<'a> {
                 query_builder.push("rating = ");
                 query_builder.push_bind(&item.rating);
                 is_empty_query = false;
-            },
+            }
         }
         if let Some(t) = item.runtime {
             if is_empty_query.not() {
@@ -136,8 +149,8 @@ impl<'a> IMDBDatabase<'a> {
                 query_builder.push("video_thumbnail_url = ");
                 query_builder.push_bind(t);
                 is_empty_query = false;
-            },
-            None => ()
+            }
+            None => (),
         };
         match &item.video_url {
             Some(t) => {
@@ -147,8 +160,8 @@ impl<'a> IMDBDatabase<'a> {
                 query_builder.push("video_url = ");
                 query_builder.push_bind(t);
                 is_empty_query = false;
-            },
-            None => ()
+            }
+            None => (),
         };
         match &item.plot {
             Some(t) => {
@@ -158,8 +171,8 @@ impl<'a> IMDBDatabase<'a> {
                 query_builder.push("plot = ");
                 query_builder.push_bind(t);
                 is_empty_query = false;
-            },
-            None => ()
+            }
+            None => (),
         };
 
         if is_empty_query {

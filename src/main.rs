@@ -5,14 +5,14 @@ use std::ops::Not;
 use std::sync::Arc;
 use std::time::Duration;
 
-use actix_web::{App, HttpServer};
 use actix_web::middleware::Logger;
 use actix_web::web::Data;
+use actix_web::{App, HttpServer};
 use chrono::{DateTime, Local};
 use log::{error, info};
-use qbittorrent::Api;
 use qbittorrent::data::{Hash, State, Torrent};
 use qbittorrent::traits::TorrentData;
+use qbittorrent::Api;
 use rayon::prelude::*;
 use serde::Deserialize;
 use tokio::sync::Mutex;
@@ -20,9 +20,9 @@ use tokio::time::Instant;
 
 use crate::api::imdb::SearchType;
 use crate::api::torrent::MediaQuality;
-use crate::db::DBConnection;
 use crate::db::downloads::DownloadDatabase;
 use crate::db::initialiser::DatabaseInitialiser;
+use crate::db::DBConnection;
 
 mod api;
 mod db;

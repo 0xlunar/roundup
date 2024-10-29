@@ -1,7 +1,7 @@
 use anyhow::format_err;
 use async_trait::async_trait;
-use reqwest::{Client, ClientBuilder};
 use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::{Client, ClientBuilder};
 use serde::Deserialize;
 
 use crate::api::imdb::{IMDBEpisode, ItemType};

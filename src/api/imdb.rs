@@ -150,7 +150,7 @@ impl<'a> IMDB {
         }
 
         let text = resp.text().await?;
-        
+
         let data = Self::scrape_html_for_data_tv(&text)?;
 
         let mut episodes = data
@@ -183,58 +183,7 @@ impl<'a> IMDB {
 
         Ok(episodes)
     }
-    pub async fn update_query_key(proxy: Option<Proxy>) -> anyhow::Result<String> {
-        let mut headers = HeaderMap::new();
-        headers.insert("Accept", HeaderValue::from_static("application/json"));
-        headers.insert("DNT", HeaderValue::from_static("1"));
-        headers.insert(
-            "Referer",
-            HeaderValue::from_static("https://www.imdb.com/chart/moviemeter/"),
-        );
-        headers.insert(
-            "Accept-Language",
-            HeaderValue::from_static("en-US,en;q=0.9,en-AU;q=0.8"),
-        );
-        headers.insert("Cache-Control", HeaderValue::from_static("no-cache"));
-        headers.insert("User-Agent", HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"));
 
-        let mut client = reqwest::ClientBuilder::new().default_headers(headers);
-        client = match proxy.clone() {
-            Some(p) => client.proxy(p),
-            None => client,
-        };
-        let client = client.build()?;
-
-        let resp = client
-            .get("https://www.imdb.com/title/tt9813792/episodes/")
-            .send()
-            .await?;
-        if resp.status().is_server_error() || resp.status().is_client_error() {
-            return Err(format_err!("Invalid ID or Not a TV Show, or unknown error"));
-        }
-
-        let text = resp.text().await?;
-        let html = Html::parse_document(&text);
-
-        let selector = Selector::parse(
-            "script[src$=\"_ssgManifest.js\"][src*=\"cloudfront.net/_next/static/\"]",
-        )
-        .unwrap();
-        let src_url = match html.select(&selector).next() {
-            Some(t) => t.value().attr("src").unwrap(),
-            None => return Err(format_err!("Missing Selector")),
-        };
-
-        let token = src_url
-            .strip_suffix("/_ssgManifest.js")
-            .unwrap()
-            .rsplit_once('/')
-            .unwrap()
-            .1
-            .to_string();
-
-        Ok(token)
-    }
     pub async fn update_media_data(id: &str, proxy: Option<Proxy>) -> anyhow::Result<IMDBItem> {
         let mut client = reqwest::ClientBuilder::new()
             .use_rustls_tls()
