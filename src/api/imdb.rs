@@ -2,7 +2,7 @@ use std::ops::Not;
 
 use anyhow::format_err;
 use chrono::Local;
-use log::error;
+use log::{error, info};
 use rayon::prelude::*;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Proxy;
@@ -319,7 +319,13 @@ impl<'a> IMDB {
             None => return Err(format_err!("__NEXT_DATA__ Missing Element")),
         };
 
-        let data: IMDBMeterObject = serde_json::from_str(json_data)?;
+        let data: IMDBMeterObject = match serde_json::from_str(json_data) {
+            Ok(data) => data,
+            Err(err) => {
+                error!("Failed to parse json: {}", err);
+                return Err(err.into());
+            }
+        };
 
         let output = data
             .props
@@ -339,12 +345,15 @@ impl<'a> IMDB {
                     id: edge.node.id.to_string(),
                     title: edge.node.title_text.text.to_string(),
                     year,
-                    image_url: edge
-                        .node
-                        .primary_image
-                        .url
-                        .to_string()
-                        .replace("._V1_", "._V1_UX200_CR0,4,200,300_"),
+                    image_url: match &edge.node.primary_image {
+                        Some(image) => image
+                            .url
+                            .to_string()
+                            .replace("._V1_", "._V1_UX200_CR0,4,200,300_"),
+                        None => {
+                            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/300px-No_image_available.svg.png".to_string()
+                        }
+                    },
                     rating: match &edge.node.certificate {
                         Some(c) => c.rating.to_string(),
                         None => "TBD".to_string(),
@@ -531,7 +540,7 @@ struct Edge {
 struct Node {
     id: String,
     title_text: TitleText,
-    primary_image: PrimaryImage,
+    primary_image: Option<PrimaryImage>,
     release_year: Option<ReleaseYear>,
     certificate: Option<Certificate>,
 }

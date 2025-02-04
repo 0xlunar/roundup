@@ -36,6 +36,20 @@ async fn main() -> anyhow::Result<()> {
     if cfg!(debug_assertions) {
         console_subscriber::init();
     }
+    
+    tokio::spawn(async move {
+       match tokio::signal::ctrl_c().await {
+           Ok(_) => {
+               info!("Exiting...");
+               std::process::exit(0);
+           },
+           Err(err) => {
+               error!("Failed to handle signal: {}", err);
+               std::process::exit(1);
+           }
+       }
+    });
+    
     let config = AppConfig::load();
 
     // This is to trigger a fresh check on launch for first time of request type
