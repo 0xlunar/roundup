@@ -1,8 +1,7 @@
 use super::DBConnection;
 use crate::api::imdb::{IMDBItem, SearchType};
 use anyhow::format_err;
-use log::info;
-use sqlx::{Execute, Postgres, QueryBuilder};
+use sqlx::{Postgres, QueryBuilder};
 use std::ops::Not;
 
 pub struct IMDBDatabase<'a> {
@@ -15,7 +14,6 @@ impl<'a> IMDBDatabase<'a> {
     }
 
     pub async fn insert_or_update(&self, item: &IMDBItem) -> Result<(), sqlx::Error> {
-        info!("Inserting Item : {:?}", item);
         let query = "INSERT INTO imdb as i_db(id, title, year, image_url, rating, popularity_rank, release_order, _type, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET image_url = $4, popularity_rank = COALESCE($6, i_db.popularity_rank), release_order = COALESCE($7, i_db.release_order), updated_at = $10;";
 
         let query = sqlx::query(query)
@@ -29,10 +27,8 @@ impl<'a> IMDBDatabase<'a> {
             .bind(&item._type)
             .bind(item.created_at)
             .bind(item.updated_at);
-        
-        info!("Query: {}", query.sql());
-            query.execute(&self.db.db)
-            .await?;
+
+        query.execute(&self.db.db).await?;
 
         Ok(())
     }
