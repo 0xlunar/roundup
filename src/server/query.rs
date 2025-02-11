@@ -202,16 +202,14 @@ async fn check_cache_then_search_imdb(
 
         match imdb_db.clear_ranking(&search_type).await {
             Ok(_) => (),
-            Err(err) => {
-                error!("{}", err);
+            Err(_) => {
                 return Err(ErrorInternalServerError("Failed to clear rankings"));
             }
         };
         // Update DB
         match imdb_db.insert_or_update_many(&items).await {
             Ok(_) => (),
-            Err(err) => {
-                error!("{}", err);
+            Err(_) => {
                 return Err(ErrorInternalServerError(
                     "Failed to insert or update IMDB items",
                 ));

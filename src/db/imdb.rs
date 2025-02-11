@@ -16,7 +16,7 @@ impl<'a> IMDBDatabase<'a> {
     pub async fn insert_or_update(&self, item: &IMDBItem) -> Result<(), sqlx::Error> {
         let query = "INSERT INTO imdb as i_db(id, title, year, image_url, rating, popularity_rank, release_order, _type, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET image_url = $4, popularity_rank = COALESCE($6, i_db.popularity_rank), release_order = COALESCE($7, i_db.release_order), updated_at = $10;";
 
-        let query = sqlx::query(query)
+        let _ = sqlx::query(query)
             .bind(&item.id)
             .bind(&item.title)
             .bind(item.year)
@@ -26,9 +26,9 @@ impl<'a> IMDBDatabase<'a> {
             .bind(item.release_order)
             .bind(&item._type)
             .bind(item.created_at)
-            .bind(item.updated_at);
-
-        query.execute(&self.db.db).await?;
+            .bind(item.updated_at)
+            .execute(&self.db.db)
+            .await?;
 
         Ok(())
     }
