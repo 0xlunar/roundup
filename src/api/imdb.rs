@@ -2,7 +2,7 @@ use std::ops::Not;
 
 use anyhow::format_err;
 use chrono::Local;
-use log::{error, info};
+use log::error;
 use rayon::prelude::*;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Proxy;

@@ -194,19 +194,25 @@ async fn check_cache_then_search_imdb(
         };
 
         // Grab new results
-        let imdb: IMDB = IMDB::new(search_type, None);
+        let imdb: IMDB = IMDB::new(search_type.clone(), None);
         let items = match imdb.search().await {
             Ok(i) => i,
             Err(e) => return Err(ErrorInternalServerError(e)),
         };
 
+        match imdb_db.clear_ranking(&search_type).await {
+            Ok(_) => (),
+            Err(_) => {
+                return Err(ErrorInternalServerError("Failed to clear rankings"));
+            }
+        };
         // Update DB
         match imdb_db.insert_or_update_many(&items).await {
             Ok(_) => (),
             Err(_) => {
                 return Err(ErrorInternalServerError(
                     "Failed to insert or update IMDB items",
-                ))
+                ));
             }
         };
         output = items;

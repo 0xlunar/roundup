@@ -187,6 +187,41 @@ impl<'a> IMDBDatabase<'a> {
         Ok(())
     }
 
+    pub async fn clear_ranking(&self, ranking_type: &SearchType) -> anyhow::Result<()> {
+        let mut query_builder: QueryBuilder<Postgres> =
+            QueryBuilder::new(String::from("UPDATE imdb SET "));
+
+        match ranking_type {
+            SearchType::MoviePopular => {
+                query_builder.push(
+                    "popularity_rank = NULL WHERE _type = 'movie' AND popularity_rank IS NOT NULL",
+                );
+            }
+            SearchType::MovieLatestRelease => {
+                query_builder.push(
+                    "release_order = NULL WHERE _type = 'movie' AND release_order IS NOT NULL",
+                );
+            }
+            SearchType::TVPopular => {
+                query_builder.push(
+                    "popularity_rank = NULL WHERE _type = 'tvshow' AND popularity_rank IS NOT NULL",
+                );
+            }
+            SearchType::TVLatestRelease => {
+                query_builder.push(
+                    "release_order = NULL WHERE _type = 'tvshow' AND release_order IS NOT NULL",
+                );
+            }
+            SearchType::Watchlist => (),
+            SearchType::Downloads => (),
+            SearchType::Query(_) => (),
+        };
+
+        query_builder.build().execute(&self.db.db).await?;
+
+        Ok(())
+    }
+
     pub async fn insert_or_update_many(&self, items: &[IMDBItem]) -> Result<(), sqlx::Error> {
         // TODO: FIX WITH ACTUAL PSQL STATEMENT OR SQLX FUNCTION THAT IS BETTER THAN THIS TRASH
         for item in items {
