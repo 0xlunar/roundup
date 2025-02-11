@@ -204,12 +204,13 @@ impl<'a> IMDBDatabase<'a> {
             }
             SearchType::TVPopular => {
                 query_builder.push(
-                    "popularity_rank = NULL WHERE _type = 'tv' AND popularity_rank IS NOT NULL",
+                    "popularity_rank = NULL WHERE _type = 'tvshow' AND popularity_rank IS NOT NULL",
                 );
             }
             SearchType::TVLatestRelease => {
-                query_builder
-                    .push("release_order = NULL WHERE _type = 'tv' AND release_order IS NOT NULL");
+                query_builder.push(
+                    "release_order = NULL WHERE _type = 'tvshow' AND release_order IS NOT NULL",
+                );
             }
             SearchType::Watchlist => (),
             SearchType::Downloads => (),
