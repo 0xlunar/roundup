@@ -212,9 +212,7 @@ impl<'a> IMDBDatabase<'a> {
                     "release_order = NULL WHERE _type = 'tvshow' AND release_order IS NOT NULL",
                 );
             }
-            SearchType::Watchlist => (),
-            SearchType::Downloads => (),
-            SearchType::Query(_) => (),
+            _ => return Ok(()),
         };
 
         query_builder.build().execute(&self.db.db).await?;
