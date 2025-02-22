@@ -103,8 +103,8 @@ impl TheRARBG {
             };
 
             let negative_keywords = [
-                "hdcam", "hdts", "ts", "cam", "camrip", "telesync", "tsx", "tc", "telecine",
-                "broski",
+                "hdcam", "hdts", "ts", "cam", "camrip", "telesync", "tsx", "tc", "telecine", "hdtc",
+                "broski", "hdtc-c1nem4"
             ]; // I don't care for cams/telesyncs, update these if you like them.
 
             let split_name = name
