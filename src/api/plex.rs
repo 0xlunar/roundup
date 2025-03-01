@@ -142,7 +142,13 @@ impl Plex {
 
         for metadata in meta {
             if !exact_match {
-                if metadata.title.starts_with(title) && metadata.year.eq(&year) {
+                if (metadata.title.starts_with(title)
+                    || match &metadata.original_title {
+                        Some(original_title) => original_title.starts_with(title),
+                        None => false,
+                    })
+                    && metadata.year.eq(&year)
+                {
                     match metadata.media.first() {
                         Some(t) => match t.part.first() {
                             Some(p) => {
@@ -237,7 +243,13 @@ impl Plex {
         };
 
         for metadata in shows_hub {
-            if metadata.title.starts_with(title) && metadata.year.eq(&year) {
+            if (metadata.title.starts_with(title)
+                || match &metadata.original_title {
+                    Some(original_title) => original_title.starts_with(title),
+                    None => false,
+                })
+                && metadata.year.eq(&year)
+            {
                 let available = self
                     .fetch_available_tvshow_children(&metadata.rating_key)
                     .await?;
@@ -316,6 +328,7 @@ struct Hub {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PlexLibraryMetadata {
+    original_title: Option<String>,
     title: String,
     #[serde(default)]
     year: u32,
