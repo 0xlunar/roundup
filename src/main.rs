@@ -36,20 +36,20 @@ async fn main() -> anyhow::Result<()> {
     if cfg!(debug_assertions) {
         console_subscriber::init();
     }
-    
+
     tokio::spawn(async move {
-       match tokio::signal::ctrl_c().await {
-           Ok(_) => {
-               info!("Exiting...");
-               std::process::exit(0);
-           },
-           Err(err) => {
-               error!("Failed to handle signal: {}", err);
-               std::process::exit(1);
-           }
-       }
+        match tokio::signal::ctrl_c().await {
+            Ok(_) => {
+                info!("Exiting...");
+                std::process::exit(0);
+            }
+            Err(err) => {
+                error!("Failed to handle signal: {}", err);
+                std::process::exit(1);
+            }
+        }
     });
-    
+
     let config = AppConfig::load();
 
     // This is to trigger a fresh check on launch for first time of request type
@@ -230,17 +230,41 @@ struct AppConfig {
 
 impl AppConfig {
     pub fn load() -> AppConfig {
-        let buffer = fs::read_to_string("./config.json").unwrap();
+        let qbittorrent_url = std::env::var("QBITTORRENT_URL").ok();
+        let qbittorrent_username = std::env::var("QBITTORRENT_USERNAME").ok();
+        let qbittorrent_password = std::env::var("QBITTORRENT_PASSWORD").ok();
+        let db_url = std::env::var("DB_URL").ok();
+        let minimum_quality = std::env::var("MINIMUM_QUALITY").ok();
+        let youtube_api_key = std::env::var("YOUTUBE_API_KEY").ok();
+        let watchlist_recheck_interval_hours =
+            std::env::var("WATCHLIST_RECHECK_INTERVAL_HOURS").ok();
+        let watchlist_recheck_interval_hours = match watchlist_recheck_interval_hours {
+            Some(hours) => hours.parse::<i64>().ok(),
+            None => None,
+        };
+
+        let concurrent_torrent_search = std::env::var("CONCURRENT_TORRENT_SEARCH").ok();
+        let concurrent_torrent_search = match concurrent_torrent_search {
+            Some(hours) => hours.parse::<bool>().ok(),
+            None => None,
+        };
+
+        let buffer = match fs::read_to_string("./config.json") {
+            Ok(buffer) => buffer,
+            Err(err) => panic!("Unable to load ./config.json: {}", err),
+        };
 
         let imported: AppConfigImport = serde_json::from_str(&buffer).unwrap();
 
+        let minimum_quality = minimum_quality.unwrap_or(imported.minimum_quality);
+
         let config = AppConfig {
-            qbittorrent_url: imported.qbittorrent_url,
-            qbittorrent_username: imported.qbittorrent_username,
-            qbittorrent_password: imported.qbittorrent_password,
-            db_url: imported.db_url,
+            qbittorrent_url: qbittorrent_url.unwrap_or(imported.qbittorrent_url),
+            qbittorrent_username: qbittorrent_username.unwrap_or(imported.qbittorrent_username),
+            qbittorrent_password: qbittorrent_password.unwrap_or(imported.qbittorrent_password),
+            db_url: db_url.unwrap_or(imported.db_url),
             valid_file_types: imported.valid_file_types,
-            minimum_quality: match imported.minimum_quality.as_str() {
+            minimum_quality: match minimum_quality.as_str() {
                 "cam" => MediaQuality::Cam,
                 "telesync" | "ts" | "tele-sync" => MediaQuality::Telesync,
                 "720p" | "720" => MediaQuality::_720p,
@@ -249,10 +273,12 @@ impl AppConfig {
                 "4320p" | "4320" | "8K" => MediaQuality::_4320p,
                 _ => MediaQuality::Unknown,
             },
-            youtube_api_key: imported.youtube_api_key,
-            watchlist_recheck_interval_hours: imported.watchlist_recheck_interval_hours,
+            youtube_api_key: youtube_api_key.unwrap_or(imported.youtube_api_key),
+            watchlist_recheck_interval_hours: watchlist_recheck_interval_hours
+                .unwrap_or(imported.watchlist_recheck_interval_hours),
             trackers: imported.trackers,
-            concurrent_torrent_search: imported.concurrent_torrent_search,
+            concurrent_torrent_search: concurrent_torrent_search
+                .unwrap_or(imported.concurrent_torrent_search),
         };
 
         config
