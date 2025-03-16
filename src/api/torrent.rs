@@ -111,7 +111,7 @@ impl Torrenter {
                 }
                 Err(err) => {
                     error!("Waiting for qBittorrent to start...");
-                    debug!("{}", err);
+                    error!("{}", err);
                     tokio::time::sleep_until(Instant::now() + Duration::from_secs(1)).await;
                 }
             }
