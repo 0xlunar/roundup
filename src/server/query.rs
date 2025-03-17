@@ -209,7 +209,8 @@ async fn check_cache_then_search_imdb(
         // Update DB
         match imdb_db.insert_or_update_many(&items).await {
             Ok(_) => (),
-            Err(_) => {
+            Err(err) => {
+                error!("Error inserting imdb: {}", err);
                 return Err(ErrorInternalServerError(
                     "Failed to insert or update IMDB items",
                 ));
