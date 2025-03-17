@@ -17,6 +17,7 @@ pub struct Episode {
 pub struct Plex {
     client: Client,
     token: String,
+    host: String,
 }
 
 impl Plex {
@@ -32,8 +33,10 @@ impl Plex {
             .default_headers(headers)
             .build()
             .unwrap();
+        
+        let host = std::env::var("PLEX_URL").ok().unwrap_or("http://127.0.0.1:32400".to_string());
 
-        Ok(Self { client, token })
+        Ok(Self { client, token, host })
     }
 
     #[cfg(target_os = "windows")]
@@ -110,7 +113,7 @@ impl Plex {
         ];
         let resp = self
             .client
-            .get("http://127.0.0.1:32400/hubs/search")
+            .get(format!("{}/hubs/search", &self.host))
             .query(&query)
             .send()
             .await?;
@@ -214,7 +217,7 @@ impl Plex {
         ];
         let resp = self
             .client
-            .get("http://127.0.0.1:32400/hubs/search")
+            .get(format!("{}/hubs/search", &self.host))
             .query(&query)
             .send()
             .await?;
@@ -267,7 +270,8 @@ impl Plex {
         let resp = self
             .client
             .get(format!(
-                "http://127.0.0.1:32400/library/metadata/{}/allLeaves",
+                "{}/library/metadata/{}/allLeaves",
+                &self.host,
                 show_id
             ))
             .query(&query)
