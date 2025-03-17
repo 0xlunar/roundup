@@ -281,6 +281,8 @@ impl AppConfig {
                 .unwrap_or(imported.concurrent_torrent_search),
         };
 
+        info!("Config: {:?}", config);
+
         config
     }
 }
