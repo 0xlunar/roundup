@@ -30,6 +30,21 @@ mod server;
 
 pub type QueryCache = Vec<(SearchType, DateTime<Local>)>;
 
+///
+/// Environment Variables
+/// key: type
+///
+/// QBITTORRENT_URL: String
+/// QBITTORRENT_USERNAME: String
+/// QBITTORRENT_PASSWORD: String
+/// DB_URL: String
+/// DB_URI: String - Alternative to DB_URL
+/// MINIMUM_QUALITY: String
+/// YOUTUBE_API_KEY: String
+/// WATCHLIST_RECHECK_INTERVAL_HOURS: i64
+/// CONCURRENT_TORRENT_SEARCH: bool
+/// PLEX_URL: String
+///
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
