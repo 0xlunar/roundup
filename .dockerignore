@@ -1,0 +1,14 @@
+target/
+docker-compose.yml
+*.md
+LICENSE
+.git/
+.cargo/
+.github/
+.idea/
+debug/
+release/
+examples/
+log/
+.gitignore
+Cargo.lock

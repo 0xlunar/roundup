@@ -1,10 +1,98 @@
-version: '3'
+version: "3"
 services:
-  database:
-    image: 'postgres:latest'
+  gluetun:
+    container_name: gluetun
+    image: qmcgaw/gluetun
+    hostname: gluetun
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
     ports:
-      - "5432:5432"
+      - 6881:6881
+    volumes:
+      - ./gluetun:/gluetun
     environment:
-      POSTGRES_USER: roundup
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: roundup
+      # Config based your provider https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers
+      - VPN_SERVICE_PROVIDER=
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=
+      - SERVER_COUNTRIES=
+      - VPN_PORT_FORWARDING=on
+    extra_hosts:
+      - "db:172.10.0.21"
+      - "qbittorrent:172.10.0.22"
+      - "roundup:172.10.0.23"
+    networks:
+      - "primary-network"
+  db:
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=postgres
+    depends_on:
+      - gluetun
+    networks:
+      primary-network:
+        ipv4_address: 172.10.0.21
+  qbittorrent:
+    image: qbittorrentofficial/qbittorrent-nox:latest
+    container_name: qbittorrent
+    privileged: true
+    ports:
+      - 8080:8080
+    environment:
+      - QBT_LEGAL_NOTICE=confirm
+      - QBT_VERSION=latest
+      - QBT_WEBUI_PORT=8080
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - ./qbittorent/config:/config
+      - /mnt/media1:/downloads
+    restart: unless-stopped
+    depends_on:
+      - gluetun
+    networks:
+      primary-network:
+        ipv4_address: 172.10.0.22
+  roundup:
+    image: roundup
+    ports:
+      - 80:80
+      - 443:443
+    depends_on:
+      - db
+      - gluetun
+      - qbittorrent
+    restart: unless-stopped
+    privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Comment out if using host machine service
+      - QBITTORRENT_URL=http://172.10.0.22:8080
+      # Uncomment if using on host machine
+      # - QBITTORRENT_URL=http://host.docker.internal:8080
+      - QBITTORRENT_USERNAME=admin
+      - QBITTORRENT_PASSWORD=changeme
+      - DB_URL=postgresql://postgres:admin@172.10.0.21:5432/postgres
+      # Update if plex is in a container and not on host system
+      - PLEX_URL=http://host.docker.internal:32400
+    volumes:
+      # Change based on Host OS
+      # MacOS (untested)
+      # - ~/Library/Preferences/:~/Library/Preferences/
+      # Linux (Debian)
+      - /var/lib/plexmediaserver/Library/Application Support/Plex Media Server:/var/lib/plexmediaserver/Library/Application Support/Plex Media Server
+    networks:
+      primary-network:
+        ipv4_address: 172.10.0.23
+networks:
+  primary-network:
+    ipam:
+      config:
+        - subnet: 172.10.0.0/16
