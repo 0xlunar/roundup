@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Formatter;
 use std::ops::Not;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::Instant;
@@ -87,7 +88,10 @@ impl TorrentItem {
 }
 
 pub struct Torrenter {
-    client: qbittorrent::Api,
+    username: String,
+    password: String,
+    address: String,
+    client: Arc<parking_lot::RwLock<Arc<qbittorrent::Api>>>,
     mpsc: UnboundedSender<String>,
     min_quality: MediaQuality,
     trackers: Vec<String>,
@@ -116,9 +120,12 @@ impl Torrenter {
                 }
             }
         }
-        let client = client.unwrap();
+        let client = Arc::new(parking_lot::RwLock::new(Arc::new(client.unwrap())));
 
         Self {
+            username: username.to_string(),
+            password: password.to_string(),
+            address: address.to_string(),
             client,
             min_quality,
             mpsc: mpsc_sender,
@@ -229,7 +236,35 @@ impl Torrenter {
         self.mpsc.send(hash)?;
 
         let torrent = TorrentDownload::new(Some(item.magnet_uri), None);
-        self.client.add_new_torrent(&torrent).await?;
+        let mut new_client = false;
+        let lock = self.client.read();
+        let client = lock.clone();
+        drop(lock);
+        match client.add_new_torrent(&torrent).await {
+            Ok(_) => (),
+            Err(err) => {
+                error!("Failed to add torrent: {}", err);
+
+                match qbittorrent::Api::new(&self.username, &self.password, &self.address).await {
+                    Ok(api) => {
+                        let mut lock = self.client.write();
+                        *lock = Arc::new(api);
+                        new_client = true;
+                    }
+                    Err(err) => {
+                        error!("Failed to connect to qBittorrent: {}", err);
+                        return Err(err.into());
+                    }
+                }
+            }
+        };
+
+        if new_client {
+            let lock = self.client.read();
+            let client = lock.clone();
+            drop(lock);
+            client.add_new_torrent(&torrent).await?;
+        }
         Ok(())
     }
 }

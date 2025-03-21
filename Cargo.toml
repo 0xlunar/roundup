@@ -29,6 +29,7 @@ rustls-pemfile = "2.1.2"
 log = "0.4.21"
 rayon = "1.10.0"
 console-subscriber = "0.2.0"
+parking_lot = { version = "0.12.3", features = ["arc_lock", "send_guard"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52.0"
