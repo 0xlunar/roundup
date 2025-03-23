@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Formatter;
 use std::ops::Not;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::Instant;
@@ -87,7 +88,10 @@ impl TorrentItem {
 }
 
 pub struct Torrenter {
-    client: qbittorrent::Api,
+    username: String,
+    password: String,
+    address: String,
+    client: Arc<parking_lot::RwLock<Arc<qbittorrent::Api>>>,
     mpsc: UnboundedSender<String>,
     min_quality: MediaQuality,
     trackers: Vec<String>,
@@ -116,9 +120,12 @@ impl Torrenter {
                 }
             }
         }
-        let client = client.unwrap();
+        let client = Arc::new(parking_lot::RwLock::new(Arc::new(client.unwrap())));
 
         Self {
+            username: username.to_string(),
+            password: password.to_string(),
+            address: address.to_string(),
             client,
             min_quality,
             mpsc: mpsc_sender,
@@ -229,7 +236,19 @@ impl Torrenter {
         self.mpsc.send(hash)?;
 
         let torrent = TorrentDownload::new(Some(item.magnet_uri), None);
-        self.client.add_new_torrent(&torrent).await?;
+
+        let client = self.client.read().clone();
+        if let Err(err) = client.add_new_torrent(&torrent).await {
+            debug!("Error adding torrent: {}", err);
+            let client =
+                qbittorrent::Api::new(&self.username, &self.password, &self.address).await?;
+            let client = Arc::new(client);
+            {
+                let mut lock = self.client.write();
+                *lock = client.clone();
+            }
+            client.add_new_torrent(&torrent).await?;
+        }
         Ok(())
     }
 }
