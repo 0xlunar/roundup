@@ -236,33 +236,17 @@ impl Torrenter {
         self.mpsc.send(hash)?;
 
         let torrent = TorrentDownload::new(Some(item.magnet_uri), None);
-        let mut new_client = false;
-        let lock = self.client.read();
-        let client = lock.clone();
-        drop(lock);
-        match client.add_new_torrent(&torrent).await {
-            Ok(_) => (),
-            Err(err) => {
-                error!("Failed to add torrent: {}", err);
 
-                match qbittorrent::Api::new(&self.username, &self.password, &self.address).await {
-                    Ok(api) => {
-                        let mut lock = self.client.write();
-                        *lock = Arc::new(api);
-                        new_client = true;
-                    }
-                    Err(err) => {
-                        error!("Failed to connect to qBittorrent: {}", err);
-                        return Err(err.into());
-                    }
-                }
+        let client = self.client.read().clone();
+        if let Err(err) = client.add_new_torrent(&torrent).await {
+            debug!("Error adding torrent: {}", err);
+            let client =
+                qbittorrent::Api::new(&self.username, &self.password, &self.address).await?;
+            let client = Arc::new(client);
+            {
+                let mut lock = self.client.write();
+                *lock = client.clone();
             }
-        };
-
-        if new_client {
-            let lock = self.client.read();
-            let client = lock.clone();
-            drop(lock);
             client.add_new_torrent(&torrent).await?;
         }
         Ok(())
