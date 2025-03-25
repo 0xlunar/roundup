@@ -95,6 +95,7 @@ pub struct Torrenter {
     mpsc: UnboundedSender<String>,
     min_quality: MediaQuality,
     trackers: Vec<String>,
+    proxy: Option<String>,
 }
 impl Torrenter {
     // Blocks until successful
@@ -105,6 +106,7 @@ impl Torrenter {
         min_quality: MediaQuality,
         mpsc_sender: UnboundedSender<String>,
         trackers: Vec<String>,
+        proxy: Option<String>,
     ) -> Self {
         let mut client = None;
         while client.is_none() {
@@ -130,6 +132,7 @@ impl Torrenter {
             min_quality,
             mpsc: mpsc_sender,
             trackers,
+            proxy,
         }
     }
 
@@ -141,9 +144,9 @@ impl Torrenter {
         concurrent_search: bool,
     ) -> anyhow::Result<Vec<TorrentItem>> {
         let ordering: Vec<Box<dyn TorrentSearch>> = vec![
-            crate::api::yts::YTS::new(&self.trackers), // Movie
-            crate::api::eztv::EZTV::new(),             // TV
-            crate::api::therarbg::TheRARBG::new(),     // Any
+            crate::api::yts::YTS::new(&self.trackers, self.proxy.as_ref()), // Movie
+            crate::api::eztv::EZTV::new(self.proxy.as_ref()),               // TV
+            crate::api::therarbg::TheRARBG::new(self.proxy.as_ref()),       // Any
         ];
 
         if concurrent_search {

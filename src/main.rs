@@ -83,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
         config.minimum_quality,
         torrent_tx.clone(),
         config.trackers.clone(),
+        config.proxy.clone()
     )
     .await;
 
@@ -227,6 +228,7 @@ struct AppConfigImport {
     #[serde(default)]
     trackers: Vec<String>,
     concurrent_torrent_search: bool,
+    proxy: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -241,6 +243,7 @@ struct AppConfig {
     watchlist_recheck_interval_hours: i64,
     trackers: Vec<String>,
     concurrent_torrent_search: bool,
+    proxy: Option<String>,
 }
 
 impl AppConfig {
@@ -263,6 +266,8 @@ impl AppConfig {
             Some(hours) => hours.parse::<bool>().ok(),
             None => None,
         };
+
+        let proxy = std::env::var("PROXY").ok();
 
         let buffer = match fs::read_to_string("./config.json") {
             Ok(buffer) => buffer,
@@ -294,6 +299,7 @@ impl AppConfig {
             trackers: imported.trackers,
             concurrent_torrent_search: concurrent_torrent_search
                 .unwrap_or(imported.concurrent_torrent_search),
+            proxy: proxy.or(imported.proxy),
         };
 
         config

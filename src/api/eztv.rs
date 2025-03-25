@@ -4,7 +4,7 @@ use anyhow::format_err;
 use async_trait::async_trait;
 use rayon::prelude::*;
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Client, ClientBuilder};
+use reqwest::{Client, ClientBuilder, Proxy};
 use serde::Deserialize;
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
@@ -15,15 +15,19 @@ pub struct EZTV {
 }
 
 impl EZTV {
-    pub fn new() -> Box<Self> {
+    pub fn new(proxy: Option<&String>) -> Box<Self> {
         let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", HeaderValue::from_static(user_agent));
         headers.insert("Accept", HeaderValue::from_static("application/json"));
 
         let client = ClientBuilder::new()
-            .default_headers(headers)
-            .build()
+            .default_headers(headers);
+
+        let client = match proxy {
+            Some(proxy) => client.proxy(Proxy::all(proxy).unwrap()),
+            None => client,
+        }.build()
             .unwrap();
 
         Box::new(Self { client })
