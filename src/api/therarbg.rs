@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use log::error;
 use rayon::prelude::*;
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Client, ClientBuilder};
+use reqwest::{Client, ClientBuilder, Proxy};
 use scraper::{Html, Selector};
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
@@ -14,16 +14,20 @@ pub struct TheRARBG {
 }
 
 impl TheRARBG {
-    pub fn new() -> Box<Self> {
+    pub fn new(proxy: Option<&String>) -> Box<Self> {
         let mut headers = HeaderMap::new();
         let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
         headers.insert("User-Agent", HeaderValue::from_static(user_agent));
         headers.insert("Accept", HeaderValue::from_static("application/json"));
 
-        let client = ClientBuilder::new()
-            .default_headers(headers)
-            .build()
-            .unwrap();
+        let client = ClientBuilder::new().default_headers(headers);
+
+        let client = match proxy {
+            Some(proxy) => client.proxy(Proxy::all(proxy).unwrap()),
+            None => client,
+        }
+        .build()
+        .unwrap();
 
         Box::new(Self { client })
     }
@@ -38,7 +42,12 @@ impl TheRARBG {
             _ => page,
         };
 
-        let url = format!("{}get-posts/keywords:{}:category:Movies:category:TV:category:Anime:ncategory:XXX/?page={}", self.base_url(), query, page);
+        let url = format!(
+            "{}get-posts/keywords:{}:category:Movies:category:TV:category:Anime:ncategory:XXX/?page={}",
+            self.base_url(),
+            query,
+            page
+        );
 
         let resp = self.client.get(url).send().await?;
         if resp.status().is_server_error() || resp.status().is_client_error() {
@@ -103,8 +112,18 @@ impl TheRARBG {
             };
 
             let negative_keywords = [
-                "hdcam", "hdts", "ts", "cam", "camrip", "telesync", "tsx", "tc", "telecine", "hdtc",
-                "broski", "hdtc-c1nem4"
+                "hdcam",
+                "hdts",
+                "ts",
+                "cam",
+                "camrip",
+                "telesync",
+                "tsx",
+                "tc",
+                "telecine",
+                "hdtc",
+                "broski",
+                "hdtc-c1nem4",
             ]; // I don't care for cams/telesyncs, update these if you like them.
 
             let split_name = name
@@ -293,7 +312,7 @@ impl TheRARBG {
                             episode: item.episode,
                             seeds: Some(item.seeds),
                             source: "TheRARBG".to_string(),
-                        })
+                        });
                     }
                     _ => break,
                 },

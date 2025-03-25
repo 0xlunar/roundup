@@ -16,5 +16,6 @@
   "youtube_api_key": "",
   "watchlist_recheck_interval_hours": 6,
   "trackers": [],
-  "concurrent_torrent_search": false
+  "concurrent_torrent_search": false,
+  "proxy": null
 }

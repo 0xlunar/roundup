@@ -7,6 +7,7 @@ use anyhow::format_err;
 use chrono::{Duration, Local};
 use log::error;
 use rayon::prelude::*;
+use reqwest::Proxy;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
@@ -15,7 +16,7 @@ use crate::api::youtube::Youtube;
 use crate::db::downloads::{ActiveDownloadIMDBItem, DownloadDatabase};
 use crate::db::imdb::IMDBDatabase;
 use crate::db::DBConnection;
-use crate::QueryCache;
+use crate::{AppConfig, QueryCache};
 
 #[derive(Deserialize)]
 pub struct SearchQueryParams {
@@ -29,6 +30,7 @@ pub async fn search(
     params: Query<SearchQueryParams>,
     cache_update: web::Data<Mutex<QueryCache>>,
     db: web::Data<DBConnection>,
+    config: web::Data<AppConfig>,
 ) -> Result<HttpResponse<String>, Error> {
     let _type = match params._type.to_ascii_lowercase().as_str() {
         "movie" | "film" => ItemType::Movie,
@@ -76,7 +78,7 @@ pub async fn search(
         return Ok(HttpResponse::Ok().message_body(html).unwrap());
     }
 
-    let results = check_cache_then_search_imdb(mode, db, cache_update).await?;
+    let results = check_cache_then_search_imdb(mode, db, cache_update, config).await?;
 
     let html = generate_search_html_imdb(results);
     Ok(HttpResponse::Ok().message_body(html).unwrap())
@@ -154,6 +156,7 @@ async fn check_cache_then_search_imdb(
     search_type: SearchType,
     db: web::Data<DBConnection>,
     cache_update: web::Data<Mutex<QueryCache>>,
+    config: web::Data<AppConfig>,
 ) -> Result<Vec<IMDBItem>, Error> {
     let imdb_db = IMDBDatabase::new(db.deref());
     let mut twelve_hour_ago: chrono::DateTime<Local> = Local::now();
@@ -194,7 +197,12 @@ async fn check_cache_then_search_imdb(
         };
 
         // Grab new results
-        let imdb: IMDB = IMDB::new(search_type.clone(), None);
+        let proxy = config
+            .proxy
+            .as_ref()
+            .map(|proxy| Proxy::all(proxy).unwrap());
+
+        let imdb: IMDB = IMDB::new(search_type.clone(), proxy);
         let items = match imdb.search().await {
             Ok(i) => i,
             Err(e) => return Err(ErrorInternalServerError(e)),
@@ -238,12 +246,15 @@ fn generate_item_html_imdb(item: &IMDBItem) -> String {
         ItemType::TvShow => "tv",
     };
 
-    format!("<div id=\"{}\" onclick=\"htmx.trigger('.htmx-request', 'htmx:abort')\" class=\"card\" style=\"width: 8rem; cursor: pointer;\" hx-get=\"/modal_metadata?id={}\" hx-target=\"#download-select\" hx-swap=\"outerHTML\" hx-indicator=\"#download-select\" hx-sync=\"#download-select:replace\" data-bs-toggle=\"modal\" data-bs-target=\"#download-modal\">\
+    format!(
+        "<div id=\"{}\" onclick=\"htmx.trigger('.htmx-request', 'htmx:abort')\" class=\"card\" style=\"width: 8rem; cursor: pointer;\" hx-get=\"/modal_metadata?id={}\" hx-target=\"#download-select\" hx-swap=\"outerHTML\" hx-indicator=\"#download-select\" hx-sync=\"#download-select:replace\" data-bs-toggle=\"modal\" data-bs-target=\"#download-modal\">\
                 <img src={} alt=\"media-image\" hx-trigger=\"intersect once\"/>\
                 <div class=\"card-body\">\
                     <p class=\"card-text\">{} ({})</p>\
                 </div>\
-            </div>", &item.id, &item.id, item.image_url, item.title, item.year)
+            </div>",
+        &item.id, &item.id, item.image_url, item.title, item.year
+    )
 }
 
 #[derive(Deserialize)]
@@ -353,7 +364,10 @@ fn create_modal_body_imdb(item: &IMDBItem) -> String {
     let watchlist_button = super::download::create_watchlist_button(&item.id, item.watchlist);
     let accordion = create_accordion_imdb(item);
 
-    let html = format!("<div id=\"download-select\">{}{}<div id=\"modal_accordion\" class=\"accordion\">{}</div></div>", heading, watchlist_button, accordion);
+    let html = format!(
+        "<div id=\"download-select\">{}{}<div id=\"modal_accordion\" class=\"accordion\">{}</div></div>",
+        heading, watchlist_button, accordion
+    );
 
     html
 }

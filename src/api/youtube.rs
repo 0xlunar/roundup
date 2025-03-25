@@ -1,6 +1,6 @@
 use anyhow::format_err;
 use rayon::prelude::*;
-use reqwest::{Client, ClientBuilder};
+use reqwest::{Client, ClientBuilder, Proxy};
 use serde::Deserialize;
 
 pub struct Youtube {
@@ -9,9 +9,14 @@ pub struct Youtube {
 }
 
 impl Youtube {
-    pub fn new(api_key: &str) -> Self {
+    pub fn new(api_key: &str, proxy: Option<&String>) -> Self {
         let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-        let client = ClientBuilder::new().user_agent(user_agent).build().unwrap();
+        let client = ClientBuilder::new().user_agent(user_agent);
+            
+        let client = match proxy {
+            Some(proxy) => client.proxy(Proxy::all(proxy).unwrap()),
+            None => client,
+        }.build().unwrap();
 
         Youtube {
             client,
