@@ -106,7 +106,7 @@ async fn main() -> anyhow::Result<()> {
         (SearchType::TVLatestRelease, twelve_hour_ago),
     ];
 
-    let youtube = api::youtube::Youtube::new(&config.youtube_api_key);
+    let youtube = api::youtube::Youtube::new(&config.youtube_api_key, config.proxy.as_ref());
     let db_conn = Data::new(db_conn);
     let app_config = Data::new(config);
 
