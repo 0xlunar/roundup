@@ -345,10 +345,14 @@ impl TorrentSearch for TheRARBG {
         let mut page = 1;
         let mut outputs = Vec::new();
         while let Ok(Some(text)) = self.fetch_query(&search, page).await {
-            let mut output = self.parse_search_table_html(text, tv_episodes.as_ref());
-            outputs.append(&mut output);
+            outputs.push(text);
             page += 1;
         }
+
+        let outputs = outputs
+            .into_par_iter()
+            .flat_map(|text| self.parse_search_table_html(text, tv_episodes.as_ref()))
+            .collect::<Vec<_>>();
 
         if outputs.is_empty() {
             return Err(format_err!("No torrents available"));
