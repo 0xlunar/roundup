@@ -2,7 +2,7 @@ use std::ops::Not;
 
 use anyhow::format_err;
 use chrono::Local;
-use log::{error, info};
+use log::error;
 use rayon::prelude::*;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Proxy;
@@ -100,7 +100,6 @@ impl<'a> IMDB {
             }
             _ => client.get(self.search_type.to_url()).send().await?,
         };
-        info!("Response Sent");
 
         let status = resp.status();
         let text = resp.text().await?;
