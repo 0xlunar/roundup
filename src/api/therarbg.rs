@@ -2,8 +2,7 @@ use anyhow::format_err;
 use async_trait::async_trait;
 use log::error;
 use rayon::prelude::*;
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Client, ClientBuilder, Proxy};
+use rquest::{Client, ClientBuilder, Proxy};
 use scraper::{Html, Selector};
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
@@ -15,19 +14,19 @@ pub struct TheRARBG {
 
 impl TheRARBG {
     pub fn new(proxy: Option<&String>) -> Box<Self> {
-        let mut headers = HeaderMap::new();
         let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-        headers.insert("User-Agent", HeaderValue::from_static(user_agent));
-        headers.insert("Accept", HeaderValue::from_static("application/json"));
-
-        let client = ClientBuilder::new().default_headers(headers);
-
-        let client = match proxy {
-            Some(proxy) => client.proxy(Proxy::all(proxy).unwrap()),
+        let mut client = rquest::ClientBuilder::new()
+            .user_agent(user_agent)
+            .zstd(true)
+            .brotli(true)
+            .deflate(true)
+            .gzip(true);
+        client = match proxy {
+            Some(p) => client.proxy(p.to_owned()),
             None => client,
-        }
-        .build()
-        .unwrap();
+        };
+
+        let client = client.build().unwrap();
 
         Box::new(Self { client })
     }

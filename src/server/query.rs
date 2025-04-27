@@ -7,7 +7,7 @@ use anyhow::format_err;
 use chrono::{Duration, Local};
 use log::error;
 use rayon::prelude::*;
-use reqwest::Proxy;
+use rquest::Proxy;
 use serde::Deserialize;
 use tokio::sync::Mutex;
 

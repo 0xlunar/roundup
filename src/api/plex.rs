@@ -3,8 +3,8 @@ use std::ops::Not;
 use anyhow::format_err;
 use rayon::prelude::*;
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Client, ClientBuilder};
+use rquest::Client;
+use rquest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
@@ -25,24 +25,33 @@ impl Plex {
         let token = Plex::get_plex_auth_token()?;
 
         let mut headers = HeaderMap::new();
-        let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-        headers.insert("User-Agent", HeaderValue::from_static(user_agent));
         headers.insert("Accept", HeaderValue::from_static("application/json"));
 
-        let client = ClientBuilder::new()
+        let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+        let client = rquest::ClientBuilder::new()
+            .user_agent(user_agent)
             .default_headers(headers)
-            .build()
-            .unwrap();
-        
-        let host = std::env::var("PLEX_URL").ok().unwrap_or("http://127.0.0.1:32400".to_string());
+            .zstd(true)
+            .brotli(true)
+            .deflate(true)
+            .gzip(true)
+            .build()?;
 
-        Ok(Self { client, token, host })
+        let host = std::env::var("PLEX_URL")
+            .ok()
+            .unwrap_or("http://127.0.0.1:32400".to_string());
+
+        Ok(Self {
+            client,
+            token,
+            host,
+        })
     }
 
     #[cfg(target_os = "windows")]
     fn get_plex_auth_token() -> anyhow::Result<String> {
-        use winreg::enums::HKEY_CURRENT_USER;
         use winreg::RegKey;
+        use winreg::enums::HKEY_CURRENT_USER;
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         let plex_reg = hkcu.open_subkey("Software\\Plex, Inc.\\Plex Media Server")?;
@@ -271,8 +280,7 @@ impl Plex {
             .client
             .get(format!(
                 "{}/library/metadata/{}/allLeaves",
-                &self.host,
-                show_id
+                &self.host, show_id
             ))
             .query(&query)
             .send()

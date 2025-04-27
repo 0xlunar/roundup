@@ -16,7 +16,6 @@ env_logger = "0.11.2"
 futures = "0.3.30"
 qbittorrent = { git = "https://github.com/0xlunar/qbittorrent.git", rev = "c084822" }
 regex = "1.10.3"
-reqwest = { version = "0.12.7", features = ["rustls-tls"] }
 ring = "0.17.8"
 rustls = { version = "0.22.3" }
 scraper = "0.19.0"
@@ -30,6 +29,8 @@ log = "0.4.21"
 rayon = "1.10.0"
 console-subscriber = "0.2.0"
 parking_lot = { version = "0.12.3", features = ["arc_lock", "send_guard"] }
+rquest = { version = "5.1.0", features = ["gzip", "zstd", "brotli", "deflate", "cookies", "json"] }
+rquest-util = "2.3.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52.0"

@@ -270,7 +270,7 @@ pub async fn find_missing_tv_shows(
     imdb_id: &str,
     title: &str,
 ) -> anyhow::Result<Option<Vec<IMDBEpisode>>> {
-    let mut all_episodes = match IMDB::search_tv_episodes(imdb_id, None, 0).await {
+    let mut all_episodes = match IMDB::search_tv_episodes(imdb_id, &None, 0).await {
         Ok(t) => t,
         Err(e) => return Err(e),
     };

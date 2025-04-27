@@ -3,8 +3,8 @@ use std::ops::Not;
 use anyhow::format_err;
 use async_trait::async_trait;
 use rayon::prelude::*;
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Client, ClientBuilder, Proxy};
+use rquest::header::{HeaderMap, HeaderValue};
+use rquest::Client;
 use serde::Deserialize;
 
 use crate::api::imdb::{IMDBEpisode, ItemType};
@@ -16,19 +16,24 @@ pub struct EZTV {
 
 impl EZTV {
     pub fn new(proxy: Option<&String>) -> Box<Self> {
-        let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
         let mut headers = HeaderMap::new();
-        headers.insert("User-Agent", HeaderValue::from_static(user_agent));
         headers.insert("Accept", HeaderValue::from_static("application/json"));
 
-        let client = ClientBuilder::new()
-            .default_headers(headers);
+        let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+        let mut client = rquest::ClientBuilder::new()
+            .user_agent(user_agent)
+            .default_headers(headers)
+            .zstd(true)
+            .brotli(true)
+            .deflate(true)
+            .gzip(true);
 
-        let client = match proxy {
-            Some(proxy) => client.proxy(Proxy::all(proxy).unwrap()),
+        client = match proxy {
+            Some(p) => client.proxy(p.to_owned()),
             None => client,
-        }.build()
-            .unwrap();
+        };
+
+        let client = client.build().unwrap();
 
         Box::new(Self { client })
     }
