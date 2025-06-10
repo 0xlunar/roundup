@@ -14,7 +14,7 @@ async-trait = "0.1.77"
 chrono = { version = "0.4.34", features = ["serde"] }
 env_logger = "0.11.2"
 futures = "0.3.30"
-qbittorrent = { git = "https://github.com/0xlunar/qbittorrent.git", rev = "c084822" }
+qbittorrent = { git = "https://github.com/0xlunar/qbittorrent.git", rev = "2ec0028" }
 regex = "1.10.3"
 reqwest = { version = "0.12.7", features = ["rustls-tls"] }
 ring = "0.17.8"
