@@ -645,6 +645,7 @@ struct IMDBNextDataPageProps {
 #[serde(rename_all = "camelCase")]
 struct IMDBNextDataAboveTheFoldData {
     id: String,
+    #[serde(default)]
     can_have_episodes: bool,
     title_text: TitleText,
     certificate: Option<Certificate>,
