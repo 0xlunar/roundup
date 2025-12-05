@@ -19,14 +19,14 @@ impl YTS {
         headers.insert("User-Agent", HeaderValue::from_static(user_agent));
         headers.insert("Accept", HeaderValue::from_static("application/json"));
 
-        let client = ClientBuilder::new()
-            .default_headers(headers);
-        
+        let client = ClientBuilder::new().default_headers(headers);
+
         let client = match proxy {
             Some(proxy) => client.proxy(Proxy::all(proxy).unwrap()),
             None => client,
-        }.build()
-            .unwrap();
+        }
+        .build()
+        .unwrap();
 
         Box::new(Self {
             client,
@@ -60,7 +60,7 @@ impl TorrentSearch for YTS {
 
         let resp = self
             .client
-            .get("https://yts.mx/api/v2/list_movies.json")
+            .get("https://yts.lt/api/v2/list_movies.json")
             .query(&query)
             .send()
             .await?;
