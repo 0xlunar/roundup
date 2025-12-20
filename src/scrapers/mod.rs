@@ -18,23 +18,15 @@ pub enum ScraperError {
 pub struct IMDbId<'a>(&'a str);
 impl<'a> IMDbId<'a> {
     pub fn new(id: &'a str) -> Result<Self, String> {
-        if id.len() < 9 {
-            return Err(format!(
-                "{id} is too short for an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-            ));
+        if id.len() >= 9
+            && id.as_bytes()[0] == b't'
+            && id.as_bytes()[1] == b't'
+            && id[2..].chars().all(|c| c.is_ascii_digit())
+        {
+            Ok(Self(id))
+        } else {
+            Err(format!("{id} is not an IMDb Id"))
         }
-
-        let mut chars = id.chars().enumerate();
-        while let Some((index, char)) = chars.next() {
-            if ((index == 0 || index == 1) && char == 't') || (char.is_ascii_digit() && index > 1) {
-                continue;
-            } else {
-                return Err(format!(
-                    "{id} is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                ));
-            }
-        }
-        Ok(Self(id))
     }
 
     pub fn as_str(&self) -> &str {
@@ -75,28 +67,19 @@ mod test {
     fn errors_if_starts_with_tt_but_not_all_ascii_numeric_afterwards() {
         assert_eq!(
             IMDbId::new("tt128l173"),
-            Err(
-                "tt128l173 is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("tt128l173 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
 
         assert_eq!(
             IMDbId::new("ttabv12345"),
-            Err(
-                "ttabv12345 is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("ttabv12345 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
 
         assert_eq!(
             IMDbId::new("tt8333838i"),
-            Err(
-                "tt8333838i is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("tt8333838i is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
     }
@@ -105,28 +88,19 @@ mod test {
     fn errors_if_starts_with_numbers() {
         assert_eq!(
             IMDbId::new("012195512"),
-            Err(
-                "012195512 is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("012195512 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
 
         assert_eq!(
             IMDbId::new("012195573"),
-            Err(
-                "012195573 is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("012195573 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
 
         assert_eq!(
             IMDbId::new("012195551"),
-            Err(
-                "012195551 is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("012195551 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
     }
@@ -135,28 +109,19 @@ mod test {
     fn errors_if_starts_with_non_tt_character() {
         assert_eq!(
             IMDbId::new("aa2195512"),
-            Err(
-                "aa2195512 is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("aa2195512 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
 
         assert_eq!(
             IMDbId::new("cx2195573"),
-            Err(
-                "cx2195573 is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("cx2195573 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
 
         assert_eq!(
             IMDbId::new("du2195551"),
-            Err(
-                "du2195551 is not an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("du2195551 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
     }
@@ -165,28 +130,19 @@ mod test {
     fn errors_if_less_than_9_characters() {
         assert_eq!(
             IMDbId::new("tt01219"),
-            Err(
-                "tt01219 is too short for an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("tt01219 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
 
         assert_eq!(
             IMDbId::new("b1012195"),
-            Err(
-                "b1012195 is too short for an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("b1012195 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
 
         assert_eq!(
             IMDbId::new("aa012391"),
-            Err(
-                "aa012391 is too short for an IMDb Id, must start with tt followed by at least 7 numbers (eg, tt0121955)"
-                    .to_string()
-            ),
+            Err("aa012391 is not an IMDb Id".to_string()),
             "Got valid id for invalid id"
         );
     }

@@ -24,14 +24,17 @@ tokio = { version = "1.48.0", features = ["full", "tracing"] }
 urlencoding = "2.1.3"
 log = "0.4.28"
 rayon = "1.11.0"
+log4rs = "1.4.0"
+flume = "0.12.0"
+config_updater = "0.1.0"
+jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 #parking_lot = { version = "0.12.5", features = ["arc_lock", "send_guard"] }
-#config_updater = "0.1.0"
 
-#[target.'cfg(windows)'.dependencies]
-#winreg = "0.55.0"
-#
-#[target.'cfg(unix)'.dependencies]
-#xmltree = "0.12.0"
-#
-#[target.'cfg(macos)'.dependencies]
-#plist = "1.6.1"
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55.0"
+
+[target.'cfg(unix)'.dependencies]
+xmltree = "0.12.0"
+
+[target.'cfg(macos)'.dependencies]
+plist = "1.8.0"

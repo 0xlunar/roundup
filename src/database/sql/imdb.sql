@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS imdb (
+    id VARCHAR(10) NOT NULL,
+    title TEXT NOT NULL,
+    
+);
