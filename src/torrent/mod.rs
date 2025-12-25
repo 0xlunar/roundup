@@ -11,19 +11,19 @@ pub trait TorrentClient: Send + Sync {
     type TorrentType<'de>: TorrentInfo + Deserialize<'de>
     where
         Self: 'de;
-    type TorrentContentsType<'de>: Deserialize<'de>
+    type TorrentContentType<'de>: TorrentContentInfo + Deserialize<'de>
     where
         Self: 'de;
-    type TorrentUpdateAdditionalArguments;
+
     async fn connect(&self) -> Result<bool, TorrentClientError>;
     async fn create_torrent(
         &self,
         identifier: TorrentIdentifier,
     ) -> Result<bool, TorrentClientError>;
-    async fn update_torrent(
+    async fn update_file_priority(
         &self,
         identifier: TorrentIdentifier,
-        additional: Self::TorrentUpdateAdditionalArguments,
+        files: Vec<<Self::TorrentContentType<'_> as TorrentContentInfo>::FileIdType>,
     ) -> Result<bool, TorrentClientError>;
     async fn pause_torrent(
         &self,
@@ -46,14 +46,21 @@ pub trait TorrentClient: Send + Sync {
     async fn view_torrent_contents(
         &self,
         identifier: TorrentIdentifier,
-    ) -> Result<Self::TorrentContentsType<'_>, TorrentClientError>;
+    ) -> Result<Vec<Self::TorrentContentType<'_>>, TorrentClientError>;
     async fn view_all_torrents(&self) -> Result<Vec<Self::TorrentType<'_>>, TorrentClientError>;
 }
 
 pub trait TorrentInfo: Send + Sync {
     fn get_id(&self) -> &str;
+    fn as_identifier(&self) -> TorrentIdentifier;
     fn get_state(&self) -> ProcessableTorrentState;
     fn get_size_in_bytes(&self) -> Option<u64>;
+}
+
+pub trait TorrentContentInfo: Send + Sync {
+    type FileIdType: Serialize + Clone + Send + Sync;
+    fn get_id(&self) -> Self::FileIdType;
+    fn get_file_type(&self) -> &str;
 }
 
 impl<'a, T: TorrentInfo> From<&'a T> for crate::database::torrent::TorrentDBItem<'a> {
@@ -65,8 +72,6 @@ impl<'a, T: TorrentInfo> From<&'a T> for crate::database::torrent::TorrentDBItem
         }
     }
 }
-
-pub trait TorrentContents {}
 
 #[derive(Debug)]
 pub enum ProcessableTorrentState {
@@ -109,7 +114,7 @@ pub enum TorrentClientError {
     CreateTorrentError(String),
     PauseTorrentError(String),
     ResumeTorrentError(String),
-    UpdateTorrentError(String),
+    UpdateFilePriorityError(String),
     ReannounceTorrentError(String),
     DeleteTorrentError(String),
     ViewTorrentError(String),
@@ -133,7 +138,7 @@ impl Display for TorrentClientError {
             TorrentClientError::ResumeTorrentError(msg) => {
                 f.write_fmt(format_args!("ResumeTorrentError: {}", msg))
             }
-            TorrentClientError::UpdateTorrentError(msg) => {
+            TorrentClientError::UpdateFilePriorityError(msg) => {
                 f.write_fmt(format_args!("UpdateTorrentError: {}", msg))
             }
             TorrentClientError::ReannounceTorrentError(msg) => {

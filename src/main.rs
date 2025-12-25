@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use crate::database::Database;
 use crate::torrent::qbittorrent::{QBittorrent, QBittorrentCredentials};
 use actix_web::middleware::Logger;
 use actix_web::{App, HttpServer};
@@ -10,7 +10,7 @@ use log4rs::{
     encode::pattern::PatternEncoder,
 };
 use serde::Deserialize;
-use crate::database::Database;
+use std::sync::Arc;
 
 mod database;
 mod managers;
@@ -46,9 +46,8 @@ async fn main() -> anyhow::Result<()> {
     let app_config_monitor: ConfigMonitor<AppConfig> = ConfigMonitor::new("./config.json", None);
     let app_config = app_config_monitor.data();
     let app_config_handle = app_config_monitor.monitor();
-    
-    
-    let database = { 
+
+    let database = {
         let config = app_config.lock().await;
         Arc::new(Database::new(&config.database_url).await?)
     };

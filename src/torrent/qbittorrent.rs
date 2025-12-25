@@ -1,10 +1,12 @@
 use crate::torrent::{
-    ProcessableTorrentState, TorrentClient, TorrentClientError, TorrentIdentifier, TorrentInfo,
+    ProcessableTorrentState, TorrentClient, TorrentClientError, TorrentContentInfo,
+    TorrentIdentifier, TorrentInfo,
 };
 use async_trait::async_trait;
+use itertools::Itertools;
 use serde::Deserialize;
-use wreq::Client;
 use wreq::multipart::Form;
+use wreq::Client;
 
 pub struct QBittorrent {
     client: Client,
@@ -59,8 +61,8 @@ pub enum QBittorrentTorrentState {
     Unknown,
 }
 
-pub struct QBittorrentTorrentUpdateAdditionalParams {
-    id: String,
+pub struct QBittorrentTorrentUpdateAdditionalParams<T: TorrentContentInfo + Send + Sync> {
+    ids: Vec<T::FileIdType>,
     priority: u8,
 }
 
@@ -82,18 +84,6 @@ impl QBittorrentCredentials {
 
 macro_rules! send_hashes_query {
     ($self:expr, $endpoint:literal, $identifier:expr, $error_type:ident) => {{
-        // let hash = match $identifier {
-        //     TorrentIdentifier::Hash(hash) => hash,
-        //     TorrentIdentifier::Magnet(magnet) => match extract_hash_from_magnet(magnet) {
-        //         Some(hash) => hash,
-        //         None => {
-        //             return Err(TorrentClientError::$error_type(
-        //                 "Failed to extract hash from magnet".to_string(),
-        //             ));
-        //         }
-        //     },
-        // };
-
         let hash = match $identifier.to_hash() {
             Some(hash) => hash,
             None => {
@@ -132,8 +122,7 @@ macro_rules! send_hashes_query {
 #[async_trait]
 impl TorrentClient for QBittorrent {
     type TorrentType<'a> = QBittorrentTorrentInfo;
-    type TorrentContentsType<'a> = Vec<QBittorrentTorrentContents>;
-    type TorrentUpdateAdditionalArguments = QBittorrentTorrentUpdateAdditionalParams;
+    type TorrentContentType<'a> = QBittorrentTorrentContents;
 
     async fn connect(&self) -> Result<bool, TorrentClientError> {
         let response = self
@@ -207,23 +196,24 @@ impl TorrentClient for QBittorrent {
         Ok(true) // TODO: Find a confirmation if actually successful
     }
 
-    async fn update_torrent(
+    async fn update_file_priority(
         &self,
         identifier: TorrentIdentifier,
-        additional: Self::TorrentUpdateAdditionalArguments,
+        files: Vec<<Self::TorrentContentType<'_> as TorrentContentInfo>::FileIdType>,
     ) -> Result<bool, TorrentClientError> {
         let hash = match identifier.to_hash() {
             Some(hash) => hash,
             None => {
-                return Err(TorrentClientError::UpdateTorrentError(
+                return Err(TorrentClientError::UpdateFilePriorityError(
                     "Failed to extract hash".to_string(),
                 ));
             }
         };
+
         let form = Form::new()
             .text("hash", hash.to_string())
-            .text("id", additional.id)
-            .text("priority", additional.priority.to_string());
+            .text("id", files.iter().join("|"))
+            .text("priority", 0.to_string());
 
         let response = self
             .client
@@ -236,48 +226,48 @@ impl TorrentClient for QBittorrent {
         let response = match response {
             Ok(response) => response,
             Err(err) => {
-                return Err(TorrentClientError::UpdateTorrentError(format!(
+                return Err(TorrentClientError::UpdateFilePriorityError(format!(
                     "Failed to send request: {err}"
                 )));
             }
         };
         if response.status().as_u16() == 415 {
-            return Err(TorrentClientError::UpdateTorrentError(
+            return Err(TorrentClientError::UpdateFilePriorityError(
                 "Torrent file not valid".to_string(),
             ));
         }
 
         if response.status().as_u16() == 415 {
-            return Err(TorrentClientError::UpdateTorrentError(
+            return Err(TorrentClientError::UpdateFilePriorityError(
                 "Torrent file not valid".to_string(),
             ));
         }
 
         if response.status().as_u16() == 415 {
-            return Err(TorrentClientError::UpdateTorrentError(
+            return Err(TorrentClientError::UpdateFilePriorityError(
                 "Torrent file not valid".to_string(),
             ));
         }
 
         if response.status().as_u16() == 415 {
-            return Err(TorrentClientError::UpdateTorrentError(
+            return Err(TorrentClientError::UpdateFilePriorityError(
                 "Torrent file not valid".to_string(),
             ));
         }
 
         match response.status().as_u16() {
-            400 => Err(TorrentClientError::UpdateTorrentError(
+            400 => Err(TorrentClientError::UpdateFilePriorityError(
                 "Priority is invalid, or at least one file id is not a valid integer".to_string(),
             )),
-            404 => Err(TorrentClientError::UpdateTorrentError(
+            404 => Err(TorrentClientError::UpdateFilePriorityError(
                 "Torrent hash was not found".to_string(),
             )),
-            409 => Err(TorrentClientError::UpdateTorrentError(
+            409 => Err(TorrentClientError::UpdateFilePriorityError(
                 "Torrent metadata hasn't downloaded yet, or at least one file id was not found"
                     .to_string(),
             )),
             200 => Ok(true),
-            _ => Err(TorrentClientError::UpdateTorrentError(format!(
+            _ => Err(TorrentClientError::UpdateFilePriorityError(format!(
                 "Failed to make request: {}",
                 response.status()
             ))),
@@ -306,7 +296,7 @@ impl TorrentClient for QBittorrent {
     async fn delete_torrent(
         &self,
         identifier: TorrentIdentifier,
-        delete_file: bool,
+        _: bool,
     ) -> Result<bool, TorrentClientError> {
         send_hashes_query!(
             self,
@@ -331,7 +321,7 @@ impl TorrentClient for QBittorrent {
     async fn view_torrent_contents(
         &self,
         identifier: TorrentIdentifier,
-    ) -> Result<Self::TorrentContentsType<'_>, TorrentClientError> {
+    ) -> Result<Vec<Self::TorrentContentType<'_>>, TorrentClientError> {
         let hash = match identifier.to_hash() {
             Some(hash) => hash,
             None => {
@@ -371,15 +361,17 @@ impl TorrentClient for QBittorrent {
         }
 
         let data = match response.bytes().await {
-            Ok(bytes) => match serde_json::from_slice::<Self::TorrentContentsType<'_>>(&bytes) {
-                Ok(data) => data,
-                Err(err) => {
-                    return Err(TorrentClientError::ViewTorrentError(format!(
-                        "Error deserialising bytes: {}",
-                        err
-                    )));
+            Ok(bytes) => {
+                match serde_json::from_slice::<Vec<Self::TorrentContentType<'_>>>(&bytes) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        return Err(TorrentClientError::ViewTorrentError(format!(
+                            "Error deserialising bytes: {}",
+                            err
+                        )));
+                    }
                 }
-            },
+            }
             Err(err) => {
                 return Err(TorrentClientError::ViewTorrentError(format!(
                     "Error parsing bytes: {}",
@@ -439,7 +431,11 @@ impl TorrentClient for QBittorrent {
 
 impl TorrentInfo for QBittorrentTorrentInfo {
     fn get_id(&self) -> &str {
-        &*self.hash
+        &self.hash
+    }
+
+    fn as_identifier(&self) -> TorrentIdentifier {
+        TorrentIdentifier::new_hash(&self.hash)
     }
 
     fn get_state(&self) -> ProcessableTorrentState {
@@ -486,5 +482,20 @@ impl TorrentInfo for QBittorrentTorrentInfo {
 
     fn get_size_in_bytes(&self) -> Option<u64> {
         Some(self.size)
+    }
+}
+
+impl TorrentContentInfo for QBittorrentTorrentContents {
+    type FileIdType = u64;
+
+    fn get_id(&self) -> Self::FileIdType {
+        self.index
+    }
+
+    fn get_file_type(&self) -> &str {
+        match self.name.rsplit_once(".") {
+            Some((_, file_type)) => file_type,
+            None => "UNKNOWN",
+        }
     }
 }

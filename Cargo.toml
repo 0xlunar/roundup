@@ -28,6 +28,7 @@ log4rs = "1.4.0"
 flume = "0.12.0"
 config_updater = "0.1.0"
 jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
+itertools = "0.14.0"
 #parking_lot = { version = "0.12.5", features = ["arc_lock", "send_guard"] }
 
 [target.'cfg(windows)'.dependencies]
