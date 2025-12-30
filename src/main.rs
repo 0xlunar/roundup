@@ -52,13 +52,29 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(Database::new(&config.database_url).await?)
     };
 
+    let wreq_client = wreq::Client::new();
+
+    let temp_config = {
+        let lock = app_config.lock().await;
+        lock.clone()
+    };
+
     let qbittorrent = QBittorrent::new(
-        wreq::Client::new(),
-        "".to_string(),
-        QBittorrentCredentials::new("".to_string(), "".to_string()),
+        wreq_client.clone(),
+        temp_config.qbittorrent_url,
+        QBittorrentCredentials::new(
+            temp_config.qbittorrent_username,
+            temp_config.qbittorrent_password,
+        ),
     );
     let torrent_manager = managers::TorrentManager::connect(qbittorrent, database.clone()).await?;
     let (sender, torrent_manager_handle) = torrent_manager.start();
+
+    let plex_manager = Arc::new(managers::PlexManager::new(
+        wreq_client.clone(),
+        database.clone(),
+        temp_config.plex_base_url,
+    )?);
 
     let _ = HttpServer::new(move || {
         App::new()
@@ -66,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
             .app_data(app_config.clone())
             .app_data(sender.clone())
             .app_data(database.clone())
+            .app_data(plex_manager.clone())
             .service(actix_files::Files::new("/static", "."))
             .service(server::api::index)
             .service(server::api::download)
@@ -81,7 +98,11 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     database_url: String,
+    qbittorrent_url: String,
+    qbittorrent_username: String,
+    qbittorrent_password: String,
+    plex_base_url: String,
 }

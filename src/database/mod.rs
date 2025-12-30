@@ -1,4 +1,4 @@
-mod imdb;
+pub mod imdb;
 pub mod torrent;
 
 pub use self::torrent::TorrentDB;

@@ -5,8 +5,8 @@ use crate::torrent::{
 use async_trait::async_trait;
 use itertools::Itertools;
 use serde::Deserialize;
-use wreq::multipart::Form;
 use wreq::Client;
+use wreq::multipart::Form;
 
 pub struct QBittorrent {
     client: Client,

@@ -1,3 +1,5 @@
+mod imdb;
+
 use std::fmt::{Display, Formatter};
 
 pub trait TorrentScraper {
@@ -36,6 +38,27 @@ impl<'a> IMDbId<'a> {
 impl<'a> Display for IMDbId<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.0)
+    }
+}
+
+pub enum IMDbMediaType {
+    Movie,
+    TvShow,
+}
+
+impl IMDbMediaType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IMDbMediaType::Movie => "1",
+            IMDbMediaType::TvShow => "2",
+        }
+    }
+
+    pub fn as_u32(&self) -> u32 {
+        match self {
+            IMDbMediaType::Movie => 1,
+            IMDbMediaType::TvShow => 2,
+        }
     }
 }
 

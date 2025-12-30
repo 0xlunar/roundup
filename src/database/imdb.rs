@@ -1,4 +1,5 @@
 use crate::database::{Database, DatabaseError};
+use crate::scrapers::{IMDbId, IMDbMediaType};
 use serde::Serialize;
 
 pub struct IMDbDB<'a> {
@@ -15,4 +16,17 @@ impl<'a> IMDbDB<'a> {
 
         Ok(())
     }
+
+    pub async fn get_minimal_metadata(
+        &self,
+        id: IMDbId<'_>,
+    ) -> Result<IMDbMinimalMetadata, DatabaseError> {
+        todo!()
+    }
+}
+
+pub struct IMDbMinimalMetadata {
+    pub title: String,
+    pub year: u32,
+    pub media_type: IMDbMediaType,
 }
