@@ -1,0 +1,13 @@
+{
+  "database_url": "",
+  "qbittorrent_url": "",
+  "qbittorrent_username": "",
+  "qbittorrent_password": "",
+  "plex_base_url": "",
+  "yts_base_url": "",
+  "tls_config": {
+    "domains": [],
+    "contact_emails": [],
+    "enable": false
+  }
+}

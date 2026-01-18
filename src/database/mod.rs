@@ -1,12 +1,14 @@
 pub mod imdb;
 pub mod torrent;
+mod watchlist;
 
 pub use self::torrent::TorrentDB;
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::{Execute, Executor, PgPool};
 use std::fmt::{Display, Formatter};
+use std::ops::Deref;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Database {
     pool: PgPool,
 }

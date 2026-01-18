@@ -33,7 +33,7 @@ pub struct QBittorrentTorrentInfo {
     pub hash: String,
     pub name: String,
     pub progress: f64,
-    pub size: u64,
+    pub size: i64,
     pub state: QBittorrentTorrentState,
 }
 
@@ -59,11 +59,6 @@ pub enum QBittorrentTorrentState {
     CheckingResumeData,
     Moving,
     Unknown,
-}
-
-pub struct QBittorrentTorrentUpdateAdditionalParams<T: TorrentContentInfo + Send + Sync> {
-    ids: Vec<T::FileIdType>,
-    priority: u8,
 }
 
 impl QBittorrent {
@@ -480,7 +475,7 @@ impl TorrentInfo for QBittorrentTorrentInfo {
         }
     }
 
-    fn get_size_in_bytes(&self) -> Option<u64> {
+    fn get_size_in_bytes(&self) -> Option<i64> {
         Some(self.size)
     }
 }

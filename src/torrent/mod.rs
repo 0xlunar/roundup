@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use sqlx::{Database, Encode, FromRow, Row};
 use std::fmt::{Display, Formatter};
 use std::ops::Mul;
 use std::sync::Arc;
@@ -54,7 +55,7 @@ pub trait TorrentInfo: Send + Sync {
     fn get_id(&self) -> &str;
     fn as_identifier(&self) -> TorrentIdentifier;
     fn get_state(&self) -> ProcessableTorrentState;
-    fn get_size_in_bytes(&self) -> Option<u64>;
+    fn get_size_in_bytes(&self) -> Option<i64>;
 }
 
 pub trait TorrentContentInfo: Send + Sync {
@@ -63,12 +64,11 @@ pub trait TorrentContentInfo: Send + Sync {
     fn get_file_type(&self) -> &str;
 }
 
-impl<'a, T: TorrentInfo> From<&'a T> for crate::database::torrent::TorrentDBItem<'a> {
+impl<'a, T: TorrentInfo> From<&'a T> for crate::database::torrent::TorrentClientItem<'a> {
     fn from(value: &'a T) -> Self {
         Self {
-            id: value.get_id(),
+            hash: value.get_id(),
             state: value.get_state(),
-            bytes: value.get_size_in_bytes(),
         }
     }
 }

@@ -1,5 +1,6 @@
 use crate::database::{Database, imdb::IMDbDB};
 use crate::scrapers::{IMDbId, IMDbMediaType};
+use anyhow::format_err;
 use serde::Deserialize;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
@@ -20,14 +21,14 @@ pub enum PlexManagerError {
     Error(anyhow::Error),
 }
 
-pub enum PlexMediaQuery<'a> {
+pub enum PlexMediaQuery {
     Query {
         title: String,
-        year: u32,
-        imdb_id: IMDbId<'a>,
+        year: i64,
+        imdb_id: IMDbId,
         media_type: IMDbMediaType,
     },
-    IMDb(IMDbId<'a>),
+    IMDb(IMDbId),
 }
 
 impl PlexManager {
@@ -47,7 +48,7 @@ impl PlexManager {
 
     pub async fn find_media(
         &self,
-        query: PlexMediaQuery<'_>,
+        query: PlexMediaQuery,
     ) -> Result<PlexLibraryItemType, PlexManagerError> {
         let (title, year, imdb_id, media_type) = match query {
             PlexMediaQuery::Query {
@@ -58,18 +59,23 @@ impl PlexManager {
             } => (title, year, imdb_id, media_type),
             PlexMediaQuery::IMDb(imdb_id) => {
                 let imdb_db = IMDbDB::new(&self.database);
-                let metadata = match imdb_db.get_minimal_metadata(imdb_id.clone()).await {
-                    Ok(output) => output,
+                let metadata = match imdb_db.get_item(imdb_id.clone()).await {
+                    Ok(output) => match output {
+                        Some(output) => output,
+                        None => {
+                            return Err(PlexManagerError::Error(format_err!("Item does not e")));
+                        }
+                    },
                     Err(err) => return Err(PlexManagerError::Error(err.into())),
                 };
 
-                (metadata.title, metadata.year, imdb_id, metadata.media_type)
+                (metadata.title, metadata.year, imdb_id, metadata._type)
             }
         };
 
         let payload_strs = &[
             ("X-Plex-Token", &*self.auth_token),
-            ("type", media_type.as_str()),
+            ("type", media_type.as_payload_str()),
             ("includeGuids", "1"),
             ("title", &*title),
             ("guid", imdb_id.as_str()),

@@ -1,4 +1,3 @@
-use crate::database::torrent::TorrentDBItem;
 use crate::database::{Database, TorrentDB};
 use crate::torrent::{
     ProcessableTorrentState, TorrentClient, TorrentClientError, TorrentContentInfo,
@@ -168,8 +167,8 @@ impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
 
     async fn upsert_all_torrents(database: Arc<Database>, torrents: &[T::TorrentType<'de>]) {
         let torrent_db = TorrentDB::new(&database);
-        let torrents: Vec<TorrentDBItem> = torrents.iter().map(|item| item.into()).collect();
-        match torrent_db.upsert_torrents(torrents).await {
+        let torrents: Vec<_> = torrents.iter().map(|item| item.into()).collect();
+        match torrent_db.update_torrent_state(torrents).await {
             Ok(_) => (),
             Err(err) => {
                 error!("Failed to upsert torrents: {err}");
@@ -186,13 +185,13 @@ impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
             .iter()
             .filter(|torrent| matches!(torrent.get_state(), ProcessableTorrentState::Finished))
             .collect::<Vec<_>>();
-        let completed_db_torrents: Vec<TorrentDBItem> = completed
+        let completed_db_torrents = completed
             .iter()
-            .map(|completed| (*completed).into())
+            .map(|completed| completed.get_id())
             .collect::<Vec<_>>();
 
         let torrent_db = TorrentDB::new(&database);
-        match torrent_db.delete_torrents(completed_db_torrents).await {
+        match torrent_db.delete_torrents(&completed_db_torrents).await {
             Ok(_) => (),
             Err(err) => {
                 error!("Error deleting torrents from database: {err}");

@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS excluded_files
+(
+    file_type VARCHAR(10) PRIMARY KEY NOT NULL
+);

@@ -1,0 +1,1 @@
+CREATE TYPE media_type AS ENUM ('movie', 'tvshow');
