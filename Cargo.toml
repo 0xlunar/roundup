@@ -31,6 +31,9 @@ jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 itertools = "0.14.0"
 rustls-acme = "0.14.1"
 dotenvy = "0.15.7"
+maud = { version = "0.27.0", features = ["actix-web"] }
+dashmap = "6.1.0"
+moka = { version = "0.12.15", features = ["future", "sync"] }
 #parking_lot = { version = "0.12.5", features = ["arc_lock", "send_guard"] }
 
 [target.'cfg(windows)'.dependencies]

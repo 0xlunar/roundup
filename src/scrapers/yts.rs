@@ -4,17 +4,17 @@ use crate::scrapers::{
     TorrentSearch,
 };
 use crate::torrent::TorrentIdentifier;
+use actix_web::web::Data;
 use anyhow::format_err;
 use serde::Deserialize;
 use std::fmt::Debug;
-use std::sync::Arc;
 use wreq::Client;
 
 #[derive(Clone)]
 pub struct YTS {
     base_url: String,
-    client: Client,
-    database: Arc<Database>,
+    client: Data<Client>,
+    database: Data<Database>,
     trackers: Vec<String>,
 }
 
@@ -45,7 +45,7 @@ macro_rules! yts_api_query {
 }
 
 impl YTS {
-    pub fn new(base_url: String, client: Client, database: Arc<Database>) -> Box<Self> {
+    pub fn new(base_url: String, client: Data<Client>, database: Data<Database>) -> Box<Self> {
         Box::new(Self {
             base_url,
             client,
@@ -120,6 +120,7 @@ impl From<TorrentIntermediate> for Option<Torrent> {
             source: value.source,
             title: value.name,
             media_type: TorrentMediaType::Movie,
+            media_quality: value.torrent.quality,
         })
     }
 }

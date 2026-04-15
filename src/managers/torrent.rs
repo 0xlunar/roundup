@@ -3,6 +3,7 @@ use crate::torrent::{
     ProcessableTorrentState, TorrentClient, TorrentClientError, TorrentContentInfo,
     TorrentIdentifier, TorrentInfo,
 };
+use actix_web::web::Data;
 use anyhow::format_err;
 use flume::{Receiver, Sender};
 use log::{error, info, warn};
@@ -13,13 +14,13 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
 pub struct TorrentManager<T: TorrentClient> {
-    client: Arc<T>,
-    database: Arc<Database>,
+    client: Data<T>,
+    database: Data<Database>,
 }
 
 struct ExcludeFileTypes {
     interior: Arc<RwLock<ExcludeTorrentItemsInterior>>,
-    database: Arc<Database>,
+    database: Data<Database>,
     expiry: Duration,
 }
 
@@ -29,7 +30,7 @@ struct ExcludeTorrentItemsInterior {
 }
 
 impl ExcludeFileTypes {
-    pub fn new(database: Arc<Database>) -> Self {
+    pub fn new(database: Data<Database>) -> Self {
         Self {
             interior: Arc::new(RwLock::new(ExcludeTorrentItemsInterior {
                 items: None,
@@ -81,12 +82,12 @@ impl ExcludeFileTypes {
 }
 
 impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
-    pub async fn connect(client: T, database: Arc<Database>) -> Result<Self, TorrentClientError> {
+    pub async fn connect(client: T, database: Data<Database>) -> Result<Self, TorrentClientError> {
         match client.connect().await {
             Ok(connected) => {
                 if connected {
                     Ok(Self {
-                        client: Arc::new(client),
+                        client: Data::new(client),
                         database,
                     })
                 } else {
@@ -114,7 +115,7 @@ impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
         (tx, thread)
     }
 
-    async fn check_for_new_torrents(client: Arc<T>, receiver: Receiver<TorrentIdentifier>) {
+    async fn check_for_new_torrents(client: Data<T>, receiver: Receiver<TorrentIdentifier>) {
         while let Ok(identifier) = receiver.recv_async().await {
             match client.create_torrent(identifier).await {
                 Ok(success) => {
@@ -131,7 +132,7 @@ impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
         }
     }
 
-    async fn monitor_torrent_status(client: Arc<T>, database: Arc<Database>) {
+    async fn monitor_torrent_status(client: Data<T>, database: Data<Database>) {
         let exclude_file_types = ExcludeFileTypes::new(database.clone());
         let reannounce_duration = Duration::from_mins(15);
         let loop_duration = Duration::from_secs(15);
@@ -165,7 +166,7 @@ impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
         }
     }
 
-    async fn upsert_all_torrents(database: Arc<Database>, torrents: &[T::TorrentType<'de>]) {
+    async fn upsert_all_torrents(database: Data<Database>, torrents: &[T::TorrentType<'de>]) {
         let torrent_db = TorrentDB::new(&database);
         let torrents: Vec<_> = torrents.iter().map(|item| item.into()).collect();
         match torrent_db.update_torrent_state(torrents).await {
@@ -177,8 +178,8 @@ impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
     }
 
     async fn remove_completed_torrents(
-        client: Arc<T>,
-        database: Arc<Database>,
+        client: Data<T>,
+        database: Data<Database>,
         torrents: &[T::TorrentType<'de>],
     ) {
         let completed = torrents
@@ -212,7 +213,7 @@ impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
         }
     }
 
-    async fn reannounce_stalled_torrents(client: Arc<T>, torrents: &[T::TorrentType<'de>]) {
+    async fn reannounce_stalled_torrents(client: Data<T>, torrents: &[T::TorrentType<'de>]) {
         let stalled_torrents = torrents
             .iter()
             .filter(|torrent| matches!(torrent.get_state(), ProcessableTorrentState::Stalled))
@@ -233,7 +234,7 @@ impl<'de, T: TorrentClient + 'static> TorrentManager<T> {
     }
 
     async fn remove_unwanted_file_types(
-        client: Arc<T>,
+        client: Data<T>,
         torrents: &[T::TorrentType<'de>],
         exclude_torrent_items: Option<Arc<Vec<String>>>,
     ) {

@@ -251,6 +251,26 @@ impl<'a> IMDbDB<'a> {
         self.get_optional(id).await
     }
 
+    pub async fn get_items(
+        &self,
+        ids: &[IMDbId],
+    ) -> Result<Vec<IMDbItem>, DatabaseError> {
+        let mut builder = QueryBuilder::new(r#"SELECT * FROM imdb WHERE id in ("#);
+
+        let mut separated = builder.separated(", ");
+        for id in ids {
+            separated.push_bind(id);
+        }
+
+        builder.push(")");
+
+        builder
+            .build_query_as::<IMDbItem>()
+            .fetch_all(&self.database.pool)
+            .await
+            .map_err(|err| DatabaseError::GetError(err.to_string()))
+    }
+
     pub async fn get_full_item(
         &self,
         id: IMDbId,

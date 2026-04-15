@@ -1,21 +1,26 @@
 use crate::database::Database;
+use crate::scrapers::imdb::IMDbItem;
+use crate::scrapers::{IMDbId, Torrent};
+use crate::server::api::QueryType;
 use crate::torrent::qbittorrent::{QBittorrent, QBittorrentCredentials};
 use actix_web::middleware::Logger;
+use actix_web::web::Data;
 use actix_web::{App, HttpServer};
 use config_updater::ConfigMonitor;
 use futures::StreamExt;
-use log::{LevelFilter, error, info};
+use log::{debug, error, info, LevelFilter};
 use log4rs::{
     append::{console::ConsoleAppender, file::FileAppender},
     config::{Appender, Root},
     encode::pattern::PatternEncoder,
 };
-use rustls_acme::AcmeConfig;
+use moka::Expiry;
 use rustls_acme::caches::DirCache;
 use rustls_acme::futures_rustls::rustls::ServerConfig;
+use rustls_acme::AcmeConfig;
 use serde::Deserialize;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 mod database;
 mod managers;
@@ -55,12 +60,14 @@ async fn main() -> anyhow::Result<()> {
 
     let database = {
         let config = app_config.lock().await;
-        Arc::new(Database::new(&config.database_url).await?)
+        Data::new(Database::new(&config.database_url).await?)
     };
 
-    let wreq_client = wreq::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()?;
+    let wreq_client = Data::new(
+        wreq::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()?,
+    );
 
     let temp_config = {
         let lock = app_config.lock().await;
@@ -78,27 +85,39 @@ async fn main() -> anyhow::Result<()> {
         ),
     );
     let torrent_manager = managers::TorrentManager::connect(qbittorrent, database.clone()).await?;
-    let (sender, torrent_manager_handle) = torrent_manager.start();
+    let (torrent_sender, torrent_manager_handle) = torrent_manager.start();
 
-    let torrent_searcher = Arc::new(
+    let torrent_searcher = Data::new(
         scrapers::TorrentSearcher::new(app_config.clone(), wreq_client.clone(), database.clone())
             .await,
     );
 
-    let plex_manager = Arc::new(managers::PlexManager::new(
+    let plex_manager = Data::new(managers::PlexManager::new(
         wreq_client.clone(),
         database.clone(),
         temp_config.plex_base_url,
     )?);
 
+    let search_cache = Data::new(
+        moka::future::Cache::builder()
+            .max_capacity(100)
+            .expire_after(SearchCacheExpiration)
+            .eviction_listener(|key, _value, cause| {
+                debug!("Evicted: {key}. Cause: {cause:?}");
+            })
+            .build(),
+    );
+    let download_cache = moka::future::Cache::<IMDbId, Arc<Vec<Torrent>>>::new(1_000);
+
     let _ = HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .app_data(app_config.clone())
-            .app_data(sender.clone())
+            .app_data(torrent_sender.clone())
             .app_data(database.clone())
             .app_data(plex_manager.clone())
             .app_data(torrent_searcher.clone())
+            .app_data(search_cache.clone())
             .service(actix_files::Files::new("/static", "."))
             .service(server::api::index)
             .service(server::api::download)
@@ -151,4 +170,33 @@ pub async fn lets_encrypt_rustls(tls_config: TLSConfig) -> ServerConfig {
     });
 
     config
+}
+
+#[derive(Debug, Clone)]
+pub enum Expiration {
+    Short,
+    Long,
+    Never,
+}
+
+impl Expiration {
+    fn as_duration(&self) -> Option<Duration> {
+        match self {
+            Expiration::Short => Some(Duration::from_hours(1)),
+            Expiration::Long => Some(Duration::from_hours(6)),
+            Expiration::Never => None,
+        }
+    }
+}
+
+struct SearchCacheExpiration;
+impl Expiry<QueryType, (Expiration, Arc<Vec<IMDbItem>>)> for SearchCacheExpiration {
+    fn expire_after_create(
+        &self,
+        _key: &QueryType,
+        value: &(Expiration, Arc<Vec<IMDbItem>>),
+        _created_at: Instant,
+    ) -> Option<Duration> {
+        value.0.as_duration()
+    }
 }

@@ -1,14 +1,14 @@
-use crate::database::{Database, imdb::IMDbDB};
+use crate::database::{imdb::IMDbDB, Database};
 use crate::scrapers::{IMDbId, IMDbMediaType};
+use actix_web::web::Data;
 use anyhow::format_err;
 use serde::Deserialize;
 use std::fmt::{Display, Formatter};
-use std::sync::Arc;
 use wreq::{Client, Response};
 
 pub struct PlexManager {
-    client: Client,
-    database: Arc<Database>,
+    client: Data<Client>,
+    database: Data<Database>,
     auth_token: String,
     url: String,
 }
@@ -33,8 +33,8 @@ pub enum PlexMediaQuery {
 
 impl PlexManager {
     pub fn new(
-        client: Client,
-        database: Arc<Database>,
+        client: Data<Client>,
+        database: Data<Database>,
         url: String,
     ) -> Result<Self, PlexManagerError> {
         let auth_token = Self::find_local_auth_token()?;

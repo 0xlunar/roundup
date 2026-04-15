@@ -5,11 +5,375 @@
     <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0"/>
     <title>Roundup</title>
     <link rel="icon" type="image/x-icon" href="./static/favicon.ico">
+    <script
+            src="https://code.jquery.com/jquery-4.0.0.min.js"
+            integrity="sha256-OaVG6prZf4v69dPg6PhVattBXkcOWQB62pdZ3ORyrao="
+            crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"
             integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz"
             crossorigin="anonymous"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css"/>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5.5.14/theme/dracula.css" rel="stylesheet" type="text/css"/>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" rel="tailwind-css"></script>
+    <link rel="stylesheet" type="text/css" href="./styles.css"/>
 </head>
-<body>
+<body data-theme="dark" class="bg-base-100" onload="metadata.showModal()">
+<div id="modal">
+    <dialog id="metadata" class="modal modal-bottom lg:modal-middle">
+        <div class="modal-box lg:min-w-3xl">
+            <div class="flex flex-row flex-wrap gap-4">
+                <figure class="hidden lg:block grow">
+                    <img
+                            class="rounded-lg w-48"
+                            src="https://m.media-amazon.com/images/M/MV5BNTBlMzA3ZTUtODZjNi00NTM0LWExMjMtNjJhYzA3YTkwMWYwXkEyXkFqcGc@._V1_QL75_UX190_CR0.jpg"
+                            alt="south_park"/>
+                </figure>
+                <div class="flex flex-col gap-4">
+                    <div class="grow">
+                        <a>
+                            <h2 class="card-title">South Park</h2>
+                            <p>1997</p>
+                        </a>
+                        <p class="text-wrap lg:max-w-lg">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam
+                            eget magna
+                            ultrices, scelerisque
+                            massa in, malesuada enim. Duis gravida ante vel erat venenatis tincidunt. Vestibulum sit</p>
+                    </div>
+                    <!--                    <div>-->
+                    <!--                        <div class="collapse collapse-arrow bg-base-100 border border-base-300">-->
+                    <!--                            <input type="radio" name="download-accordion" checked="checked"/>-->
+                    <!--                            <div class="collapse-title font-semibold">Trailer</div>-->
+                    <!--                            <div class="collapse-content text-sm">Not implemented</div>-->
+                    <!--                        </div>-->
+                    <!--                        <div class="collapse collapse-arrow bg-base-100 border border-base-300">-->
+                    <!--                            <input type="radio" name="download-accordion"/>-->
+                    <!--                            <div class="collapse-title font-semibold">Downloads</div>-->
+                    <!--                            <div class="collapse-content text-sm">Not implemented</div>-->
+                    <!--                        </div>-->
+                    <!--                    </div>-->
+                    <div class="items-end">
+                        <fieldset class="fieldset">
+                            <button class="btn btn-soft btn-accent">Add to watchlist</button>
+                            <!--                            <div id="download-actions-skeleton"-->
+                            <!--                                 class="flex skeleton h-16 w-full items-center justify-center"-->
+                            <!--                                 hx-swap="outerHTML"-->
+                            <!--                                 hx-get="/api/fetch-downloads?imdb_id=tt0000001">-->
+                            <!--                                <span class="skeleton skeleton-text text-xl">Fetching Downloads...</span>-->
+                            <!--                            </div>-->
+                            <div id="download-actions" class=""
+                                 hx-indicator="#download-actions-skeleton">
+                                <div class="collapse collapse-plus bg-base-100 border border-base-300">
+                                    <input type="checkbox" name="season-accordion"/>
+                                    <div class="collapse-title font-semibold">Season 1</div>
+                                    <div class="collapse-content">
+                                        <button class="btn btn-soft btn-accent">Download all</button>
+                                        <form class="flex flex-row gap-4" name="download-form"
+                                              hx-post="/api/download">
+                                            <fieldset class="fieldset flex flex-row flex-grow gap-4">
+                                                <legend class="fieldset-legend">Episode 1</legend>
+                                                <select name="quality" class="select flex flex-grow">
+                                                    <option disabled selected>Choose quality</option>
+                                                    <legend class="fieldset-legend">YTS</legend>
+                                                    <option value="0">720p</option>
+                                                    <option value="1">1080p</option>
+                                                    <legend class="fieldset-legend">TheRARBG</legend>
+                                                    <option value="2">4K</option>
+                                                </select>
+                                                <button type="submit" value="Submit" class="btn btn-soft btn-accent">
+                                                    Download
+                                                </button>
+                                            </fieldset>
+                                        </form>
+                                        <form class="flex flex-row gap-4" name="download-form"
+                                              hx-post="/api/download">
+                                            <fieldset class="fieldset flex flex-row flex-grow gap-4">
+                                                <legend class="fieldset-legend">Episode 2</legend>
+                                                <select name="quality" class="select flex flex-grow">
+                                                    <option disabled selected>Choose quality</option>
+                                                    <legend class="fieldset-legend">YTS</legend>
+                                                    <option value="0">720p</option>
+                                                    <option value="1">1080p</option>
+                                                    <legend class="fieldset-legend">TheRARBG</legend>
+                                                    <option value="2">4K</option>
+                                                </select>
+                                                <button type="submit" value="Submit" class="btn btn-soft btn-accent">
+                                                    Download
+                                                </button>
+                                            </fieldset>
+                                        </form>
 
+                                    </div>
+                                </div>
+                                <div class="collapse collapse-plus bg-base-100 border border-base-300">
+                                    <input type="checkbox" name="season-accordion"/>
+                                    <div class="collapse-title font-semibold">Season 2</div>
+                                    <div class="collapse-content">
+                                        <form class="flex flex-row gap-4" name="download-form"
+                                              hx-post="/api/download">
+                                            <fieldset class="fieldset flex flex-row flex-grow gap-4">
+                                                <legend class="fieldset-legend">Download</legend>
+                                                <select name="quality" class="select flex flex-grow">
+                                                    <option disabled selected>Choose quality</option>
+                                                    <legend class="fieldset-legend">YTS</legend>
+                                                    <option value="0">720p</option>
+                                                    <option value="1">1080p</option>
+                                                    <legend class="fieldset-legend">TheRARBG</legend>
+                                                    <option value="2">4K</option>
+                                                </select>
+                                                <button type="submit" value="Submit" class="btn btn-soft btn-accent">
+                                                    Download
+                                                </button>
+                                            </fieldset>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                    </div>
+                </div>
+            </div>
+
+
+            <!--            <div class="card lg:card-side bg-base-100">-->
+            <!--                <figure class="object-fill">-->
+            <!--                    <img-->
+            <!--                            src="https://m.media-amazon.com/images/M/MV5BNTBlMzA3ZTUtODZjNi00NTM0LWExMjMtNjJhYzA3YTkwMWYwXkEyXkFqcGc@._V1_QL75_UX190_CR0.jpg"-->
+            <!--                            alt="south_park"/>-->
+            <!--                </figure>-->
+            <!--                <div class="card-body">-->
+            <!--                    <a>-->
+            <!--                        <h2 class="card-title">South Park</h2>-->
+            <!--                        <p>1997</p>-->
+            <!--                    </a>-->
+            <!--                    <p>Lorem ipsum</p>-->
+            <!--                    <div class="card-actions">-->
+            <!--                        <div class="collapse collapse-arrow bg-base-100 border border-base-300">-->
+            <!--                            <input type="radio" name="download-accordion" checked="checked"/>-->
+            <!--                            <div class="collapse-title font-semibold">Trailer</div>-->
+            <!--                            <div class="collapse-content text-sm">Not implemented</div>-->
+            <!--                        </div>-->
+            <!--                        <div class="collapse collapse-arrow bg-base-100 border border-base-300">-->
+            <!--                            <input type="radio" name="download-accordion"/>-->
+            <!--                            <div class="collapse-title font-semibold">Trailer</div>-->
+            <!--                            <div class="collapse-content text-sm">Not implemented</div>-->
+            <!--                        </div>-->
+            <!--                    </div>-->
+            <!--                </div>-->
+            <!--            </div>-->
+            <!--            <div class="modal-action">-->
+            <!--                <form method="dialog">-->
+            <!--                    &lt;!&ndash; if there is a button in form, it will close the modal &ndash;&gt;-->
+            <!--                    <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>-->
+            <!--                </form>-->
+            <!--            </div>-->
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>close</button>
+        </form>
+    </dialog>
+</div>
+<div id="messages" class="flex flex-col toast toast-end">
+    <div class="alert alert-info transition-discrete" onclick="dismiss_toast(this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             class="h-6 w-6 shrink-0 stroke-current">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Hidden 1</span>
+    </div>
+    <div class="alert alert-info" onclick="dismiss_toast(this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             class="h-6 w-6 shrink-0 stroke-current">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Hidden 2</span>
+    </div>
+    <div class="alert alert-info" onclick="dismiss_toast(this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             class="h-6 w-6 shrink-0 stroke-current">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Hidden 3</span>
+    </div>
+</div>
+<div class="flex flex-col h-screen">
+    <div id="header">
+        <div class="navbar bg-base-100 shadow-sm">
+            <div class="navbar-start">
+                <div class="dropdown">
+                    <div tabindex="0" role="button" class="btn btn-ghost lg:hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                             stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M4 6h16M4 12h8m-8 6h16"/>
+                        </svg>
+                    </div>
+                    <ul
+                            tabindex="-1"
+                            class="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow"
+                    >
+                        <li><a role="button" class="btn btn-secondary btn-active">Popular Movies</a></li>
+                        <li><a role="button" class="btn btn-soft btn-secondary">Popular TV Shows</a></li>
+                        <li><a role="button" class="btn btn-soft btn-secondary">Movies Releasing Soon</a></li>
+                        <li><a role="button" class="btn btn-soft btn-secondary">TV Shows Releasing Soon</a></li>
+                        <li><a role="button" class="btn btn-soft btn-secondary">Watchlist</a></li>
+                        <li><a role="button" class="btn btn-soft btn-secondary">Downloads</a></li>
+                    </ul>
+                </div>
+                <a class="btn btn-ghost text-xl">🤠</a>
+            </div>
+            <div class="navbar-center hidden lg:flex">
+                <ul class="menu menu-horizontal px-1">
+                    <li><a role="button" class="btn btn-primary btn-active">Popular Movies</a></li>
+                    <li><a role="button" class="btn btn-soft btn-primary">Popular TV Shows</a></li>
+                    <li><a role="button" class="btn btn-soft btn-primary">Movies Releasing Soon</a></li>
+                    <li><a role="button" class="btn btn-soft btn-primary">TV Shows Releasing Soon</a></li>
+                    <li><a role="button" class="btn btn-soft btn-primary">Watchlist</a></li>
+                    <li><a role="button" class="btn btn-soft btn-primary">Downloads</a></li>
+                </ul>
+            </div>
+            <div class="navbar-end">
+                <label class="input">
+                    <svg class="h-[1em] opacity-50" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                        <g
+                                stroke-linejoin="round"
+                                stroke-linecap="round"
+                                stroke-width="2.5"
+                                fill="none"
+                                stroke="currentColor"
+                        >
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.3-4.3"></path>
+                        </g>
+                    </svg>
+                    <input type="search" class="grow" placeholder="Search" hx-target="#media" hx-indicator=""/>
+                </label>
+            </div>
+        </div>
+    </div>
+    <div id="main" class="bg-base-100 flex-grow">
+        <div id="media" class="flex flex-row flex-wrap items-center justify-center gap-2 p-2">
+            <div class="flex flex-col w-48 gap-4">
+                <div class="card bg-base-300 h-64 cursor-pointer">
+                    <figure class="rounded-lg">
+                        <img
+                                src="https://m.media-amazon.com/images/M/MV5BNTBlMzA3ZTUtODZjNi00NTM0LWExMjMtNjJhYzA3YTkwMWYwXkEyXkFqcGc@._V1_QL75_UX190_CR0.jpg"
+                                alt="south_park"/>
+                    </figure>
+                    <div class="group absolute h-full w-full">
+                        <div class="invisible group-hover:visible bg-base-300/70 h-full w-full rounded-lg">
+                            <div class="card-body">
+                                <h2 class="card-title">South Park</h2>
+                                <p>1997</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+            <div class="flex w-48 flex-col gap-4">
+                <div class="skeleton h-64 w-full"></div>
+            </div>
+        </div>
+    </div>
+    <div id="footer" class="bg-base-100 shadow-sm">
+        <footer class="footer flex flex-row justify-between gap-1 p-2">
+            <div class="flex flex-row items-center justify-left">
+                <a class="text-xl">🤠</a>
+                <a>Roundup</a>
+            </div>
+            <div class="flex flex-row items-center justify-right">
+                <a href="https://github.com/0xlunar/roundup">
+                    <svg role="img"
+                         width="24"
+                         height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><title>GitHub</title>
+                        <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+                              fill="white"/>
+                    </svg>
+                </a>
+            </div>
+        </footer>
+    </div>
+</div>
+<script type="application/javascript">
+    function dismiss_toast(element) {
+        element.remove();
+    }
+</script>
 </body>
 </html>

@@ -2,14 +2,15 @@ use crate::torrent::{
     ProcessableTorrentState, TorrentClient, TorrentClientError, TorrentContentInfo,
     TorrentIdentifier, TorrentInfo,
 };
+use actix_web::web::Data;
 use async_trait::async_trait;
 use itertools::Itertools;
 use serde::Deserialize;
-use wreq::Client;
 use wreq::multipart::Form;
+use wreq::Client;
 
 pub struct QBittorrent {
-    client: Client,
+    client: Data<Client>,
     host: String,
     credentials: QBittorrentCredentials,
 }
@@ -62,7 +63,7 @@ pub enum QBittorrentTorrentState {
 }
 
 impl QBittorrent {
-    pub fn new(client: Client, host: String, credentials: QBittorrentCredentials) -> Self {
+    pub fn new(client: Data<Client>, host: String, credentials: QBittorrentCredentials) -> Self {
         Self {
             client,
             host,
@@ -435,20 +436,22 @@ impl TorrentInfo for QBittorrentTorrentInfo {
 
     fn get_state(&self) -> ProcessableTorrentState {
         match self.state {
-            QBittorrentTorrentState::Error => ProcessableTorrentState::Other("Torrent Errored"),
+            QBittorrentTorrentState::Error => {
+                ProcessableTorrentState::Other("Torrent Errored".into())
+            }
             QBittorrentTorrentState::MissingFiles => {
-                ProcessableTorrentState::Other("Torrent missing files")
+                ProcessableTorrentState::Other("Torrent missing files".into())
             }
             QBittorrentTorrentState::Uploading => ProcessableTorrentState::Seeding,
             QBittorrentTorrentState::PausedUP => ProcessableTorrentState::Finished,
             QBittorrentTorrentState::QueuedUP => ProcessableTorrentState::Seeding,
             QBittorrentTorrentState::StalledUP => ProcessableTorrentState::Stalled,
             QBittorrentTorrentState::CheckingUP => {
-                ProcessableTorrentState::Other("Checking torrent for upload")
+                ProcessableTorrentState::Other("Checking torrent for upload".into())
             }
             QBittorrentTorrentState::ForcedUp => ProcessableTorrentState::Seeding,
             QBittorrentTorrentState::Allocating => {
-                ProcessableTorrentState::Other("Allocating space for torrent")
+                ProcessableTorrentState::Other("Allocating space for torrent".into())
             }
             QBittorrentTorrentState::Downloading => {
                 ProcessableTorrentState::Downloading(Some(self.progress))
@@ -460,17 +463,19 @@ impl TorrentInfo for QBittorrentTorrentInfo {
             QBittorrentTorrentState::QueuedDL => ProcessableTorrentState::Paused,
             QBittorrentTorrentState::StalledDL => ProcessableTorrentState::Stalled,
             QBittorrentTorrentState::CheckingDL => {
-                ProcessableTorrentState::Other("Checking torrent for download")
+                ProcessableTorrentState::Other("Checking torrent for download".into())
             }
             QBittorrentTorrentState::ForcedDL => {
                 ProcessableTorrentState::Downloading(Some(self.progress))
             }
             QBittorrentTorrentState::CheckingResumeData => {
-                ProcessableTorrentState::Other("Checking torrent to resume")
+                ProcessableTorrentState::Other("Checking torrent to resume".into())
             }
-            QBittorrentTorrentState::Moving => ProcessableTorrentState::Other("Moving torrent"),
+            QBittorrentTorrentState::Moving => {
+                ProcessableTorrentState::Other("Moving torrent".into())
+            }
             QBittorrentTorrentState::Unknown => {
-                ProcessableTorrentState::Other("Unknown issue occurred")
+                ProcessableTorrentState::Other("Unknown issue occurred".into())
             }
         }
     }

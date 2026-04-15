@@ -1,6 +1,6 @@
 pub mod imdb;
 pub mod torrent;
-mod watchlist;
+pub mod watchlist;
 
 pub use self::torrent::TorrentDB;
 use sqlx::postgres::PgPoolOptions;

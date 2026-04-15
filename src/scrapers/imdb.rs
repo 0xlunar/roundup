@@ -1,6 +1,7 @@
 use super::{IMDbId, IMDbMediaType};
-use crate::database::Database;
 use crate::database::imdb::IMDbDB;
+use crate::database::Database;
+use actix_web::web::Data;
 use anyhow::format_err;
 use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 use log::warn;
@@ -17,8 +18,8 @@ static DEFAULT_IMAGE_URL: &str =
     "https://upload.wikimedia.org/wikipedia/commons/1/14/No_Image_Available.jpg";
 #[derive(Clone)]
 pub struct IMDbScraper {
-    client: wreq::Client,
-    database: Arc<Database>,
+    client: Data<wreq::Client>,
+    database: Data<Database>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,7 +28,7 @@ pub enum IMDbSortBy {
     ReleaseOrder,
 }
 
-#[derive(FromRow)]
+#[derive(FromRow, Clone)]
 pub struct IMDbItem {
     pub id: IMDbId,
     pub title: String,
@@ -78,7 +79,7 @@ pub enum IMDbScraperError {
 }
 
 impl IMDbScraper {
-    pub fn new(client: wreq::Client, database: Arc<Database>) -> Self {
+    pub fn new(client: Data<wreq::Client>, database: Data<Database>) -> Self {
         Self { client, database }
     }
 

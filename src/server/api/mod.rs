@@ -1,8 +1,10 @@
 mod download;
+mod modal;
 mod search;
+mod torrents;
 
 use actix_files::NamedFile;
-use actix_web::{Error, get};
+use actix_web::{get, Error};
 use std::path::PathBuf;
 
 pub use download::*;

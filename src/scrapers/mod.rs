@@ -1,12 +1,14 @@
 pub mod imdb;
 mod yts;
 
-use crate::AppConfig;
 use crate::database::Database;
 use crate::torrent::TorrentIdentifier;
+use crate::AppConfig;
+use actix_web::web::Data;
 use anyhow::format_err;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
+use sqlx::FromRow;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -22,16 +24,16 @@ pub trait TorrentScraper: Send + Sync {
 
 pub struct TorrentSearcher {
     config: Arc<Mutex<AppConfig>>,
-    client: Client,
-    database: Arc<Database>,
+    client: Data<Client>,
+    database: Data<Database>,
     scrapers: Vec<Box<dyn TorrentScraper>>,
 }
 
 impl TorrentSearcher {
     pub async fn new(
         config: Arc<Mutex<AppConfig>>,
-        client: Client,
-        database: Arc<Database>,
+        client: Data<Client>,
+        database: Data<Database>,
     ) -> Self {
         let yts_base_url = {
             let lock = config.lock().await;
@@ -65,13 +67,16 @@ impl TorrentSearcher {
     }
 }
 
+#[derive(Clone)]
 pub struct Torrent {
     pub torrent: TorrentIdentifier,
     pub source: String,
     pub title: String,
     pub media_type: TorrentMediaType,
+    pub media_quality: MediaQuality,
 }
 
+#[derive(PartialEq, PartialOrd, Ord, Eq, Clone)]
 pub enum TorrentMediaType {
     Movie,
     TvShowEpisode {
@@ -94,7 +99,7 @@ pub enum TorrentSearch {
     IMDb(IMDbId),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialOrd, PartialEq, Ord, Eq, Clone, sqlx::Type)]
 pub enum MediaQuality {
     _240p,
     _360p,
@@ -113,7 +118,7 @@ pub enum TorrentScraperError {
     Anyhow(anyhow::Error),
 }
 
-#[derive(Debug, Clone, PartialEq, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, sqlx::Type, Eq, Hash)]
 #[sqlx(transparent, no_pg_array)]
 pub struct IMDbId(Arc<str>);
 impl<'a> IMDbId {

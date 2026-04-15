@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use sqlx::{Database, Encode, FromRow, Row};
+use sqlx::encode::IsNull;
+use sqlx::error::BoxDynError;
+use sqlx::{Database, Decode, Encode, FromRow, Postgres, Row};
 use std::fmt::{Display, Formatter};
 use std::ops::Mul;
 use std::sync::Arc;
@@ -80,7 +82,7 @@ pub enum ProcessableTorrentState {
     Seeding,
     Finished,
     Stalled,
-    Other(&'static str),
+    Other(Arc<str>),
 }
 
 impl Display for ProcessableTorrentState {
@@ -103,6 +105,67 @@ impl Display for ProcessableTorrentState {
     }
 }
 
+impl<'en> Encode<'en, sqlx::Postgres> for ProcessableTorrentState {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Postgres as Database>::ArgumentBuffer,
+    ) -> Result<IsNull, BoxDynError> {
+        let value = match self {
+            ProcessableTorrentState::Downloading(progress) => match progress {
+                Some(progress) => format!("downloading:{}", progress),
+                None => "downloading:none".to_string(),
+            },
+            ProcessableTorrentState::Paused => "paused".to_string(),
+            ProcessableTorrentState::Seeding => "seeding".to_string(),
+            ProcessableTorrentState::Finished => "finished".to_string(),
+            ProcessableTorrentState::Stalled => "stalled".to_string(),
+            ProcessableTorrentState::Other(other) => format!("other:{other}"),
+        };
+
+        <String as sqlx::Encode<'_, Postgres>>::encode(value, buf)
+    }
+}
+
+impl<'de> Decode<'de, sqlx::Postgres> for ProcessableTorrentState {
+    fn decode(value: <Postgres as Database>::ValueRef<'de>) -> Result<Self, BoxDynError> {
+        let value = <String as Decode<sqlx::Postgres>>::decode(value)?;
+
+        if value.starts_with("downloading:") {
+            let progress = &value[12..];
+            let progress = if progress == "none" {
+                None
+            } else {
+                Some(progress.parse::<f64>()?)
+            };
+            Ok(Self::Downloading(progress))
+        } else if value.starts_with("other:") {
+            Ok(Self::Other((&value[6..]).into()))
+        } else if value == "paused" {
+            Ok(Self::Paused)
+        } else if value == "seeding" {
+            Ok(Self::Seeding)
+        } else if value == "finished" {
+            Ok(Self::Finished)
+        } else if value == "stalled" {
+            Ok(Self::Stalled)
+        } else {
+            Err(format!("Got Invalid State: {}", value).into())
+        }
+    }
+}
+
+impl sqlx::Type<Postgres> for ProcessableTorrentState {
+    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
+        <sqlx::Postgres as sqlx::Database>::TypeInfo::with_name("text")
+    }
+
+    fn compatible(ty: &<sqlx::Postgres as sqlx::Database>::TypeInfo) -> bool {
+        *ty == <sqlx::Postgres as sqlx::Database>::TypeInfo::with_name("text")
+        || *ty == <sqlx::Postgres as sqlx::Database>::TypeInfo::with_name("varchar")
+    }
+}
+
+#[derive(Clone)]
 pub enum TorrentIdentifier {
     Hash(Arc<str>),
     Magnet(Arc<str>),
