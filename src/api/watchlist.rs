@@ -11,6 +11,7 @@ use tokio::time::Instant;
 use crate::api::imdb::{IMDBEpisode, IMDBItem, ItemType};
 use crate::api::plex::Plex;
 use crate::api::torrent::{MediaQuality, TorrentItem, Torrenter};
+use crate::api::waf::AwsWafClient;
 use crate::db::downloads::DownloadDatabase;
 use crate::db::imdb::IMDBDatabase;
 use crate::db::DBConnection;
@@ -25,6 +26,7 @@ pub async fn monitor_watchlist(
     plex: Arc<Plex>,
     torrenter: Arc<Torrenter>,
     app_config: Data<AppConfig>,
+    client: Data<AwsWafClient>,
 ) {
     info!("Starting Watchlist Monitor");
     let imdb_db = IMDBDatabase::new(db.deref());
@@ -64,6 +66,7 @@ pub async fn monitor_watchlist(
                         torrenter.clone(),
                         Data::clone(&app_config),
                         Arc::clone(&db),
+                        client.clone()
                     )
                     .await
                 }
@@ -113,11 +116,12 @@ async fn check_tv_downloads_imdb(
     torrenter: Arc<Torrenter>,
     app_config: Data<AppConfig>,
     db: Arc<DBConnection>,
+    client: Data<AwsWafClient>
 ) -> anyhow::Result<()> {
     let title = format!("{} ({})", &item.title, item.year);
 
     let concurrent_search = app_config.concurrent_torrent_search;
-    let missing_episodes = download::find_missing_tv_shows(plex, &item.id, &title).await?;
+    let missing_episodes = download::find_missing_tv_shows(plex, client, &item.id, &title).await?;
     if missing_episodes.is_none() {
         return Err(format_err!("No missing episodes"));
     }

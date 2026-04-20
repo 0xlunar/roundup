@@ -60,7 +60,7 @@ impl TorrentSearch for YTS {
 
         let resp = self
             .client
-            .get("https://yts.lt/api/v2/list_movies.json")
+            .get("https://movies-api.accel.li/api/v2/list_movies.json")
             .query(&query)
             .send()
             .await?;

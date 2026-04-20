@@ -12,6 +12,7 @@ use serde::Deserialize;
 use tokio::sync::Mutex;
 
 use crate::api::imdb::{IMDBItem, ItemType, SearchType, IMDB};
+use crate::api::waf::AwsWafClient;
 use crate::api::youtube::Youtube;
 use crate::db::downloads::{ActiveDownloadIMDBItem, DownloadDatabase};
 use crate::db::imdb::IMDBDatabase;
@@ -31,6 +32,7 @@ pub async fn search(
     cache_update: web::Data<Mutex<QueryCache>>,
     db: web::Data<DBConnection>,
     config: web::Data<AppConfig>,
+    waf_client: web::Data<AwsWafClient>,
 ) -> Result<HttpResponse<String>, Error> {
     let _type = match params._type.to_ascii_lowercase().as_str() {
         "movie" | "film" => ItemType::Movie,
@@ -78,7 +80,7 @@ pub async fn search(
         return Ok(HttpResponse::Ok().message_body(html).unwrap());
     }
 
-    let results = check_cache_then_search_imdb(mode, db, cache_update, config).await?;
+    let results = check_cache_then_search_imdb(mode, db, cache_update, config, waf_client).await?;
 
     let html = generate_search_html_imdb(results);
     Ok(HttpResponse::Ok().message_body(html).unwrap())
@@ -157,6 +159,7 @@ async fn check_cache_then_search_imdb(
     db: web::Data<DBConnection>,
     cache_update: web::Data<Mutex<QueryCache>>,
     config: web::Data<AppConfig>,
+    waf_client: web::Data<AwsWafClient>,
 ) -> Result<Vec<IMDBItem>, Error> {
     let imdb_db = IMDBDatabase::new(db.deref());
     let mut twelve_hour_ago: chrono::DateTime<Local> = Local::now();
@@ -197,12 +200,12 @@ async fn check_cache_then_search_imdb(
         };
 
         // Grab new results
-        let proxy = config
-            .proxy
-            .as_ref()
-            .map(|proxy| Proxy::all(proxy).unwrap());
+        // let proxy = config
+        //     .proxy
+        //     .as_ref()
+        //     .map(|proxy| Proxy::all(proxy).unwrap());
 
-        let imdb: IMDB = IMDB::new(search_type.clone(), proxy);
+        let imdb: IMDB = IMDB::new(search_type.clone(), waf_client);
         let items = match imdb.search().await {
             Ok(i) => i,
             Err(e) => return Err(ErrorInternalServerError(e)),
@@ -267,6 +270,7 @@ pub async fn modal_metadata(
     params: Query<ModalMetadataQuery>,
     db: web::Data<DBConnection>,
     yt: web::Data<Youtube>,
+    waf_client: Data<AwsWafClient>,
 ) -> Result<HttpResponse<String>, Error> {
     let body = {
         let mut cached_item = match get_cached_item_imdb(&params.id, Data::clone(&db)).await {
@@ -300,7 +304,7 @@ pub async fn modal_metadata(
         }
 
         if cached_item.plot.is_none() {
-            let metadata = match IMDB::update_media_data(&params.id, None).await {
+            let metadata = match IMDB::update_media_data(&params.id, waf_client).await {
                 Ok(t) => t,
                 Err(e) => return Err(ErrorInternalServerError(e)),
             };

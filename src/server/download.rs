@@ -10,6 +10,7 @@ use serde::Deserialize;
 use crate::api::imdb::{IMDBEpisode, ItemType, IMDB};
 use crate::api::plex::Plex;
 use crate::api::torrent::{MediaQuality, TorrentItem, Torrenter};
+use crate::api::waf::AwsWafClient;
 use crate::db::downloads::DownloadDatabase;
 use crate::db::imdb::IMDBDatabase;
 use crate::db::DBConnection;
@@ -42,12 +43,18 @@ pub async fn find_download(
     db: Data<DBConnection>,
     torrenter: Data<Torrenter>,
     app_config: Data<AppConfig>,
+    waf_client: Data<AwsWafClient>,
 ) -> Result<HttpResponse<String>, Error> {
     let concurrent_search = app_config.concurrent_torrent_search;
     let missing_tv_episodes = match params._type.as_str() {
         "tv" => {
-            match find_missing_tv_shows(plex.clone().into_inner(), &params.imdb_id, &params.title)
-                .await
+            match find_missing_tv_shows(
+                plex.clone().into_inner(),
+                waf_client,
+                &params.imdb_id,
+                &params.title,
+            )
+            .await
             {
                 Ok(t) => t,
                 Err(e) => return Err(ErrorInternalServerError(e)),
@@ -107,7 +114,7 @@ pub async fn find_download(
         Err(e) => {
             return Ok(HttpResponse::Ok()
                 .message_body(format!("<b>{}</b>", e))
-                .unwrap())
+                .unwrap());
         }
     };
 
@@ -150,13 +157,16 @@ fn create_download_modal_options(items: Vec<TorrentItem>) -> String {
             output.push_str("<div id=\"season_accordion\" class=\"accordion\">");
             for season in seasons {
                 let season_number = season.iter().next().unwrap().season.unwrap();
-                let accordion_item = format!("<div class=\"accordion-item\">\
+                let accordion_item = format!(
+                    "<div class=\"accordion-item\">\
         <h3 class=\"accordion-header\">\
             <button class=\"accordion-button collapsed\" type=\"button\" data-bs-toggle=\"collapse\" data-bs-target=\"#collapseSeason{}\" aria-expanded=\"false\" aria-controls=\"collapseSeason{}\">\
                 Season {}\
             </button>\
         </h3>\
-        <div id=\"collapseSeason{}\" class=\"accordion-collapse collapse\" data-bs-parent=\"#season_accordion\">", season_number, season_number, season_number, season_number);
+        <div id=\"collapseSeason{}\" class=\"accordion-collapse collapse\" data-bs-parent=\"#season_accordion\">",
+                    season_number, season_number, season_number, season_number
+                );
                 output.push_str(&accordion_item);
                 output.push_str("<div style=\"display: flex; flex-direction: column;\">");
 
@@ -176,16 +186,38 @@ fn create_download_modal_options(items: Vec<TorrentItem>) -> String {
 
                     let episode = item.episode.as_ref().unwrap();
                     if *episode == -1 {
-                        let button = format!("\
+                        let button = format!(
+                            "\
                 <button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"season\": {}, \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}' hx-ext='json-enc' hx-swap=\"outerHTML\" hx-disabled-elt=\"closest button\" hx-confirm=\"Start download?\">\
                     Entire Season {} - {} [{}]\
-                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), item.quality, item.source);
+                </button>",
+                            btn_colour,
+                            imdb_id,
+                            item.season.as_ref().unwrap(),
+                            item.quality,
+                            urlencoding::encode(&item.magnet_uri),
+                            item.season.as_ref().unwrap(),
+                            item.quality,
+                            item.source
+                        );
                         output.push_str(&button);
                     } else {
-                        let button = format!("\
+                        let button = format!(
+                            "\
                 <button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"season\": {}, \"episode\": {}, \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}' hx-ext='json-enc' hx-swap=\"outerHTML\" hx-disabled-elt=\"closest button\" hx-confirm=\"Start download?\">\
                     Season: {} Episode: {} - {} [{}]\
-                </button>", btn_colour, imdb_id, item.season.as_ref().unwrap(), episode, item.quality, urlencoding::encode(&item.magnet_uri), item.season.as_ref().unwrap(), episode, item.quality, item.source);
+                </button>",
+                            btn_colour,
+                            imdb_id,
+                            item.season.as_ref().unwrap(),
+                            episode,
+                            item.quality,
+                            urlencoding::encode(&item.magnet_uri),
+                            item.season.as_ref().unwrap(),
+                            episode,
+                            item.quality,
+                            item.source
+                        );
 
                         output.push_str(&button);
                     }
@@ -243,12 +275,17 @@ fn create_download_movie_modal_button(item: &TorrentItem) -> String {
     };
     let value = format!(
         "hx-vals='{{\"queries\":[{{\"imdb_id\": \"{}\", \"quality\": \"{}\", \"magnet_uri\": \"{}\"}}]}}'",
-        imdb_id, item.quality, urlencoding::encode(&item.magnet_uri)
+        imdb_id,
+        item.quality,
+        urlencoding::encode(&item.magnet_uri)
     );
 
     let btn_colour = button_colour_for_quality(&item.quality);
 
-    format!("<button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-ext='json-enc' hx-confirm=\"Start download?\" hx-swap=\"outerHTML\" hx-target=\"#download_selection\"{}>{} [{}]</button>", btn_colour, value, item.quality, item.source)
+    format!(
+        "<button class=\"download-button btn btn-{}\" hx-post=\"/start_download\" hx-ext='json-enc' hx-confirm=\"Start download?\" hx-swap=\"outerHTML\" hx-target=\"#download_selection\"{}>{} [{}]</button>",
+        btn_colour, value, item.quality, item.source
+    )
 }
 
 fn button_colour_for_quality(quality: &MediaQuality) -> &'static str {
@@ -267,10 +304,11 @@ fn button_colour_for_quality(quality: &MediaQuality) -> &'static str {
 
 pub async fn find_missing_tv_shows(
     plex: Arc<Plex>,
+    client: Data<AwsWafClient>,
     imdb_id: &str,
     title: &str,
 ) -> anyhow::Result<Option<Vec<IMDBEpisode>>> {
-    let mut all_episodes = match IMDB::search_tv_episodes(imdb_id, None, 0).await {
+    let mut all_episodes = match IMDB::search_tv_episodes(imdb_id, client, 0).await {
         Ok(t) => t,
         Err(e) => return Err(e),
     };
@@ -403,7 +441,10 @@ pub async fn update_watchlist(
 }
 
 pub fn create_watchlist_button(imdb_id: &str, state: bool) -> String {
-    let mut button = format!("<div id=\"watchlist-button\"><button type=\"button\" class=\"btn btn-outline-secondary\" hx-target=\"#watchlist-button\" hx-get=\"/update_watchlist?imdb_id={}&state={}\">", imdb_id, !state);
+    let mut button = format!(
+        "<div id=\"watchlist-button\"><button type=\"button\" class=\"btn btn-outline-secondary\" hx-target=\"#watchlist-button\" hx-get=\"/update_watchlist?imdb_id={}&state={}\">",
+        imdb_id, !state
+    );
     if state {
         button.push_str("Remove from watchlist");
     } else {

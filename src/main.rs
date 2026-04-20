@@ -5,6 +5,12 @@ use std::ops::Not;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::api::imdb::SearchType;
+use crate::api::torrent::MediaQuality;
+use crate::api::waf::AwsWafClient;
+use crate::db::downloads::DownloadDatabase;
+use crate::db::initialiser::DatabaseInitialiser;
+use crate::db::DBConnection;
 use actix_web::middleware::Logger;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer};
@@ -14,15 +20,11 @@ use qbittorrent::data::{Hash, State, Torrent};
 use qbittorrent::traits::TorrentData;
 use qbittorrent::Api;
 use rayon::prelude::*;
+use reqwest::cookie::Jar;
+use reqwest::{Client, Proxy};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
-
-use crate::api::imdb::SearchType;
-use crate::api::torrent::MediaQuality;
-use crate::db::downloads::DownloadDatabase;
-use crate::db::initialiser::DatabaseInitialiser;
-use crate::db::DBConnection;
 
 mod api;
 mod db;
@@ -83,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
         config.minimum_quality,
         torrent_tx.clone(),
         config.trackers.clone(),
-        config.proxy.clone()
+        config.proxy.clone(),
     )
     .await;
 
@@ -105,6 +107,10 @@ async fn main() -> anyhow::Result<()> {
         (SearchType::TVPopular, twelve_hour_ago.to_owned()),
         (SearchType::TVLatestRelease, twelve_hour_ago),
     ];
+
+    let webdriver_url: Option<Arc<str>> = config.webdriver_url.clone().map(|driver| driver.into());
+    let proxy: Option<Proxy> = config.proxy.clone().map(|proxy| Proxy::all(proxy).unwrap());
+    let waf_client = Data::new(AwsWafClient::new(webdriver_url, proxy));
 
     let youtube = api::youtube::Youtube::new(&config.youtube_api_key, config.proxy.as_ref());
     let db_conn = Data::new(db_conn);
@@ -156,6 +162,7 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(plex_session.clone()),
         Arc::clone(&torrent_client),
         Data::clone(&app_config),
+        waf_client.clone(),
     ));
 
     let youtube = Data::new(youtube);
@@ -172,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
             .app_data(Data::clone(&torrent_client))
             .app_data(Data::clone(&youtube))
             .app_data(Data::clone(&app_config))
+            .app_data(Data::clone(&waf_client))
             .service(actix_files::Files::new("/static", "./static").show_files_listing())
             .service(server::index)
             .service(server::query::search)
@@ -229,6 +237,7 @@ struct AppConfigImport {
     trackers: Vec<String>,
     concurrent_torrent_search: bool,
     proxy: Option<String>,
+    webdriver_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -244,6 +253,7 @@ struct AppConfig {
     trackers: Vec<String>,
     concurrent_torrent_search: bool,
     proxy: Option<String>,
+    webdriver_url: Option<String>,
 }
 
 impl AppConfig {
@@ -268,6 +278,8 @@ impl AppConfig {
         };
 
         let proxy = std::env::var("PROXY").ok();
+
+        let webdriver_url = std::env::var("WEBDRIVER_URL").ok();
 
         let buffer = match fs::read_to_string("./config.json") {
             Ok(buffer) => buffer,
@@ -300,6 +312,7 @@ impl AppConfig {
             concurrent_torrent_search: concurrent_torrent_search
                 .unwrap_or(imported.concurrent_torrent_search),
             proxy: proxy.or(imported.proxy),
+            webdriver_url: webdriver_url.or(imported.webdriver_url),
         };
 
         config

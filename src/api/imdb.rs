@@ -1,5 +1,5 @@
-use std::ops::Not;
-
+use crate::api::waf::*;
+use actix_web::web::Data;
 use anyhow::format_err;
 use chrono::Local;
 use log::error;
@@ -8,10 +8,12 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Proxy;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
+use std::ops::Not;
+use std::sync::Arc;
 
 pub struct IMDB {
     search_type: SearchType,
-    proxy: Option<Proxy>,
+    client: Data<AwsWafClient>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -60,8 +62,11 @@ pub struct IMDBEpisode {
 }
 
 impl<'a> IMDB {
-    pub fn new(search_type: SearchType, proxy: Option<Proxy>) -> IMDB {
-        IMDB { search_type, proxy }
+    pub fn new(search_type: SearchType, client: Data<AwsWafClient>) -> IMDB {
+        IMDB {
+            search_type,
+            client,
+        }
     }
 
     pub async fn search(&self) -> anyhow::Result<Vec<IMDBItem>> {
@@ -69,41 +74,25 @@ impl<'a> IMDB {
             return Err(format_err!("Invalid Search Type"));
         }
 
-        let mut headers = HeaderMap::new();
-        headers.insert("Accept", HeaderValue::from_static("*/*"));
-        headers.insert("DNT", HeaderValue::from_static("1"));
-        headers.insert(
-            "Referer",
-            HeaderValue::from_static("https://www.imdb.com/chart/moviemeter/"),
-        );
-        headers.insert(
-            "Accept-Language",
-            HeaderValue::from_static("en-US,en;q=0.9,en-AU;q=0.8"),
-        );
-        headers.insert("Cache-Control", HeaderValue::from_static("no-cache"));
-        headers.insert("User-Agent", HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"));
-
-        let mut client = reqwest::ClientBuilder::new().default_headers(headers);
-        client = match &self.proxy {
-            Some(p) => client.proxy(p.to_owned()),
-            None => client,
-        };
-        let client = client.build()?;
-
         let resp = match self.search_type {
             SearchType::Query(_) => {
-                client
+                self.client
                     .get(self.search_type.to_url())
                     .header("Accept", "application/json")
-                    .send()
+                    .send_and_handle_waf(self.client.webdriver(), self.client.jar())
                     .await?
             }
-            _ => client.get(self.search_type.to_url()).send().await?,
+            _ => {
+                self.client
+                    .get(self.search_type.to_url())
+                    .send_and_handle_waf(self.client.webdriver(), self.client.jar())
+                    .await?
+            }
         };
 
         let status = resp.status();
         let text = resp.text().await?;
-        if status.is_server_error() || status.is_client_error() {
+        if status.is_server_error() || status.is_client_error() || status.as_u16() == 202 {
             return Err(format_err!(
                 "Failed request: {:?}, Status: {}, Body: {}",
                 self.search_type,
@@ -119,16 +108,9 @@ impl<'a> IMDB {
     }
     pub async fn search_tv_episodes(
         imdb_id: &str,
-        proxy: Option<Proxy>,
+        client: Data<AwsWafClient>,
         season: u32,
     ) -> anyhow::Result<Vec<IMDBEpisode>> {
-        let mut client = reqwest::ClientBuilder::new().default_headers(Self::create_headers());
-        client = match proxy.clone() {
-            Some(p) => client.proxy(p),
-            None => client,
-        };
-        let client = client.build()?;
-
         let query = match season {
             0 => Vec::new(),
             _ => vec![("season", season.to_string())],
@@ -142,7 +124,11 @@ impl<'a> IMDB {
 
         let url = format!("https://www.imdb.com/title/{}/episodes/", id);
 
-        let resp = client.get(url).query(&query).send().await?;
+        let resp = client
+            .get(url)
+            .query(&query)
+            .send_and_handle_waf(client.webdriver(), client.jar())
+            .await?;
 
         let status = resp.status();
         if status.is_server_error() || status.is_client_error() {
@@ -176,7 +162,7 @@ impl<'a> IMDB {
                     }
                 };
                 let mut ep =
-                    Box::pin(IMDB::search_tv_episodes(imdb_id, proxy.clone(), season)).await?;
+                    Box::pin(IMDB::search_tv_episodes(imdb_id, client.clone(), season)).await?;
                 episodes.append(&mut ep);
             }
         }
@@ -184,19 +170,16 @@ impl<'a> IMDB {
         Ok(episodes)
     }
 
-    pub async fn update_media_data(id: &str, proxy: Option<Proxy>) -> anyhow::Result<IMDBItem> {
-        let mut client = reqwest::ClientBuilder::new()
-            .use_rustls_tls()
-            .default_headers(Self::create_headers());
-        client = match proxy {
-            Some(p) => client.proxy(p.clone()),
-            None => client,
-        };
-        let client = client.build()?;
-
+    pub async fn update_media_data(
+        id: &str,
+        client: Data<AwsWafClient>,
+    ) -> anyhow::Result<IMDBItem> {
         let url = format!("https://www.imdb.com/title/{}/?ref_=ls_t_2", id);
 
-        let resp = client.get(url).send().await?;
+        let resp = client
+            .get(url)
+            .send_and_handle_waf(client.webdriver(), client.jar())
+            .await?;
 
         let status = resp.status();
         if status.is_server_error() || status.is_client_error() {
@@ -389,40 +372,6 @@ impl<'a> IMDB {
             .collect();
 
         Ok(output)
-    }
-    fn create_headers() -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        headers.insert("Accept", HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"));
-        headers.insert(
-            "Referer",
-            HeaderValue::from_static("https://www.imdb.com/chart/moviemeter/"),
-        );
-        headers.insert(
-            "Accept-Language",
-            HeaderValue::from_static("en-US,en;q=0.9,en-AU;q=0.8"),
-        );
-        headers.insert("Cache-Control", HeaderValue::from_static("no-cache"));
-        headers.insert("pragma", HeaderValue::from_static("no-cache"));
-        headers.insert("priority", HeaderValue::from_static("u=0, i"));
-        headers.insert(
-            "sec-ch-ua",
-            HeaderValue::from_static(
-                "\"Google Chrome\";v=\"129\", \"Not=A?Brand\";v=\"8\", \"Chromium\";v=\"129\"",
-            ),
-        );
-        headers.insert("sec-ch-ua-mobile", HeaderValue::from_static("?0"));
-        headers.insert(
-            "sec-ch-ua-platform",
-            HeaderValue::from_static("\"Windows\""),
-        );
-        headers.insert("sec-fetch-dest", HeaderValue::from_static("document"));
-        headers.insert("sec-fetch-mode", HeaderValue::from_static("navigate"));
-        headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
-        headers.insert("sec-fetch-user", HeaderValue::from_static("?1"));
-        headers.insert("sec-gpc", HeaderValue::from_static("1"));
-        headers.insert("upgrade-insecure-requests", HeaderValue::from_static("1"));
-        headers.insert("User-Agent", HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"));
-        headers
     }
 }
 
