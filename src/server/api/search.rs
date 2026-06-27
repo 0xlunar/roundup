@@ -54,7 +54,7 @@ pub async fn search(
             match top_movies {
                 Ok(movies) => {
                     let movies = movies
-                        .iter()
+                        .into_iter()
                         .map(|movie| movie.item.item)
                         .collect::<Vec<_>>();
                     let markup = item_cards(&movies);
@@ -73,7 +73,10 @@ pub async fn search(
             let calendar = scraper.release_calendar(IMDbMediaType::Movie).await;
             match calendar {
                 Ok(movies) => {
-                    let movies = movies.iter().map(|movie| movie.item).collect::<Vec<_>>();
+                    let movies = movies
+                        .into_iter()
+                        .map(|movie| movie.item)
+                        .collect::<Vec<_>>();
                     let markup = item_cards(&movies);
 
                     let arc_movies = Arc::new(movies);
@@ -92,7 +95,7 @@ pub async fn search(
                 .await;
             match top_tv {
                 Ok(tv) => {
-                    let tv = tv.iter().map(|tv| tv.item.item).collect::<Vec<_>>();
+                    let tv = tv.into_iter().map(|tv| tv.item.item).collect::<Vec<_>>();
                     let markup = item_cards(&tv);
 
                     let arc_tvshows = Arc::new(tv);
@@ -109,7 +112,7 @@ pub async fn search(
             let calendar = scraper.release_calendar(IMDbMediaType::TvShow).await;
             match calendar {
                 Ok(tv) => {
-                    let tv = tv.iter().map(|tv| tv.item).collect::<Vec<_>>();
+                    let tv = tv.into_iter().map(|tv| tv.item).collect::<Vec<_>>();
                     let markup = item_cards(&tv);
 
                     let arc_movies = Arc::new(tv);
@@ -157,7 +160,7 @@ pub async fn search(
 
                     let arc_media = Arc::new(media);
                     search_cache
-                        .insert(search_query.query, (Expiration::Short, arc_media))
+                        .insert(search_query.query.clone(), (Expiration::Short, arc_media))
                         .await;
 
                     Ok(HttpResponse::with_body(StatusCode::OK, markup))
