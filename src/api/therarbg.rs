@@ -1,6 +1,6 @@
 use anyhow::format_err;
 use async_trait::async_trait;
-use log::error;
+use log::{error, info};
 use rayon::prelude::*;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Client, ClientBuilder, Proxy};
@@ -346,6 +346,9 @@ impl TorrentSearch for TheRARBG {
         let mut outputs = Vec::new();
         while let Ok(Some(text)) = self.fetch_query(&search, page).await {
             let mut output = self.parse_search_table_html(text, tv_episodes.as_ref());
+            if output.is_empty() {
+                break;
+            }
             outputs.append(&mut output);
             page += 1;
         }
